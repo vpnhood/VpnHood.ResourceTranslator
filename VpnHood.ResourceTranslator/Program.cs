@@ -100,7 +100,7 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(extraPromptPath))
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(extraPromptPath));
 
-        var hashPath = GetHashesFilePath(basePath);
+        var hashesPath = GetHashesFilePath(basePath);
 
         // Load base language file
         if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr))
@@ -112,19 +112,21 @@ internal static class Program
         var orderedKeys = baseObj!.Select(p => p.Key).ToList();
         var baseMap = baseObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
 
-        // Compute current hashes
-        var currentHashes = ComputeHashes(baseMap);
-        var previousHashes = await LoadHashesAsync(hashPath);
+        // Compute current hashes: MD5 only
+        var currentMd5 = ComputeMd5Hashes(baseMap);
+
+        // Load previous hashes (MD5 file only)
+        var previousHashes = await LoadHashesAsync(hashesPath);
 
         // Handle rebuild hashes only
         if (rebuildHashes)
         {
-            await SaveHashesAsync(hashPath, currentHashes);
+            await SaveHashesAsync(hashesPath, currentMd5);
             Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
             return 0;
         }
 
-        var changedKeys = DetermineChangedKeys(baseMap.Keys, currentHashes, previousHashes);
+        var changedKeys = DetermineChangedKeys(baseMap.Keys, currentMd5, previousHashes);
 
         if (showChanges)
         {
@@ -145,12 +147,11 @@ internal static class Program
 
         ITranslator translator = new GeminiTranslator(apiKey, model);
 
-        // Find sibling locale files (all *.json except the base and our hash file)
+        // Find sibling locale files (all *.json except the base)
         var dir = Path.GetDirectoryName(basePath)!;
         var baseFileName = Path.GetFileName(basePath);
         var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
-            .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase)
-                        && !Path.GetFileName(p).Equals(Path.GetFileName(hashPath), StringComparison.OrdinalIgnoreCase))
+            .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         // Handle rebuild specific language
@@ -173,7 +174,7 @@ internal static class Program
         }
 
         // Save updated hashes (only after attempting translations)
-        await SaveHashesAsync(hashPath, currentHashes);
+        await SaveHashesAsync(hashesPath, currentMd5);
         Console.WriteLine("Done.");
         return 0;
     }
@@ -332,7 +333,7 @@ internal static class Program
         Console.WriteLine("Examples:");
         Console.WriteLine("  vhtranslate -b locales/en.json");
         Console.WriteLine("  vhtranslate -b locales/fr.json -r es");
-        Console.WriteLine("  vhtranslate -b locales/en.json -x custom-rules.txt");
+        Console.WriteLine("  vhtranslate -b locales/en.json -x custom-prompt.txt");
         Console.WriteLine("  vhtranslate -b locales/de.json -c");
         Console.WriteLine();
         Console.WriteLine("Notes:");
@@ -370,21 +371,20 @@ internal static class Program
         await JsonSerializer.SerializeAsync(fs, obj, options);
     }
 
-    private static Dictionary<string, string> ComputeHashes(Dictionary<string, string> map)
+    private static Dictionary<string, string> ComputeMd5Hashes(Dictionary<string, string> map)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (k, v) in map)
         {
-            var hash = Sha256(v);
-            result[k] = hash;
+            result[k] = Md5Hex(v);
         }
         return result;
     }
 
-    private static string Sha256(string input)
+    private static string Md5Hex(string input)
     {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+        using var md5 = MD5.Create();
+        var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes);
     }
 
@@ -405,30 +405,36 @@ internal static class Program
 
     private static async Task SaveHashesAsync(string path, Dictionary<string, string> hashes)
     {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var options = new JsonSerializerOptions { WriteIndented = true };
         var txt = JsonSerializer.Serialize(hashes, options);
         await File.WriteAllTextAsync(path, txt);
     }
 
     private static HashSet<string> DetermineChangedKeys(IEnumerable<string> keys,
-        Dictionary<string, string> currentHashes,
-        Dictionary<string, string> previousHashes)
+        Dictionary<string, string> currentMd5,
+        Dictionary<string, string> previous)
     {
         var changed = new HashSet<string>(StringComparer.Ordinal);
         foreach (var key in keys)
         {
-            var cur = currentHashes.GetValueOrDefault(key);
-            var prev = previousHashes.GetValueOrDefault(key);
+            var cur = currentMd5.GetValueOrDefault(key);
+            var prev = previous.GetValueOrDefault(key);
             if (!string.Equals(cur, prev, StringComparison.Ordinal))
+            {
                 changed.Add(key);
+            }
         }
         return changed;
     }
 
     private static string GetHashesFilePath(string basePath)
     {
-        // Same directory, suffix .hashes.json, e.g., en.json.hashes.json, fr.json.hashes.json
-        return Path.Combine(Path.GetDirectoryName(basePath)!, Path.GetFileName(basePath) + ".hashes.json");
+        // Location: <baseDir>/vh_translate/<baseLang>_watch.json
+        var baseDir = Path.GetDirectoryName(basePath)!;
+        var baseLang = Path.GetFileNameWithoutExtension(basePath);
+        return Path.Combine(baseDir, "vh_translate", $"{baseLang}_watch.json");
     }
 
     private static bool LooksLikeUrl(string s)

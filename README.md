@@ -19,6 +19,13 @@ An intelligent i18n resource translator that uses Google's Gemini AI to automati
 - .NET 8.0 or later
 - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
 
+### Build from Source
+```bash
+git clone https://github.com/your-repo/VpnHood.ResourceTranslator.git
+cd VpnHood.ResourceTranslator
+dotnet build --configuration Release
+```
+
 ## Quick Start
 
 1. **Set your API key**:
@@ -87,7 +94,7 @@ vhtranslate -b locales/en.json -c
 #### Use Custom Instructions
 Add custom translation rules via a text file:
 ```bash
-vhtranslate -b locales/en.json -x custom-rules.txt
+vhtranslate -b locales/en.json -x custom-prompt.txt
 ```
 
 #### Reset Hash State
@@ -99,15 +106,15 @@ vhtranslate -b locales/en.json -i
 #### Use Different Model
 Use a different Gemini model:
 ```bash
-vhtranslate -b locales/en.json -m gemini-1.5-pro
+vhtranslate -b locales/en.json -m gemini-2.5-pro
 ```
 
 #### Skip Specific Translations
 Create custom rules to skip certain translations:
 ```bash
-# Create custom-rules.txt with skip rules
-echo "For Chinese: Return '*' for any key containing 'PRIVACY' or 'LEGAL'" > custom-rules.txt
-vhtranslate -b locales/en.json -x custom-rules.txt
+# Create custom-prompt.txt with skip rules
+echo "For Chinese: Return '*' for any key containing 'PRIVACY' or 'LEGAL'" > custom-prompt.txt
+vhtranslate -b locales/en.json -x custom-prompt.txt
 ```
 
 ## File Structure
@@ -119,27 +126,28 @@ Your locale directory can have any language as the base:
 **English as Base:**
 ```
 locales/
-├── en.json              # Base English file
-├── fr.json              # French translations
-├── es.json              # Spanish translations
-├── de.json              # German translations
-└── en.json.hashes.json  # Hash tracking file (auto-generated)
++-- en.json              # Base English file
++-- fr.json              # French translations
++-- es.json              # Spanish translations
++-- de.json              # German translations
++-- vh_translate/
+    +-- en_watch.json    # Hash tracking file (auto-generated)
 ```
 
 **French as Base:**
 ```
 locales/
-├── fr.json              # Base French file
-├── en.json              # English translations
-├── es.json              # Spanish translations
-├── de.json              # German translations
-└── fr.json.hashes.json  # Hash tracking file (auto-generated)
++-- fr.json              # Base French file
++-- en.json              # English translations
++-- es.json              # Spanish translations
++-- de.json              # German translations
++-- vh_translate/
+    +-- fr_watch.json    # Hash tracking file (auto-generated)
 ```
 
 ### Generated Files
 
-- `{base}.json.hashes.json` - Tracks changes to detect what needs retranslation
-- `translation-prompt.txt` - Default AI prompt template (customizable)
+- `vh_translate/<base>_watch.json` - Tracks changes to detect what needs retranslation
 
 ## Sample Files
 
@@ -173,7 +181,7 @@ locales/
 }
 ```
 
-### custom-rules.txt (Custom Instructions)
+### custom-prompt.txt (Custom Instructions)
 ```text
 Translation Guidelines:
 - Keep technical terms like "VPN", "API", "JSON" untranslated
@@ -181,19 +189,6 @@ Translation Guidelines:
 - For Spanish, use Latin American variants
 - Brand name "VpnHood" should always remain unchanged
 - Use gender-neutral language where possible
-```
-
-### translation-prompt.txt (AI Prompt Template)
-```text
-You are an expert app localization system.
-Task: Translate the given string from the source language to the target language.
-Rules:
-- Preserve placeholders exactly as-is: tokens in curly braces like {x}, {name}, {minutes}.
-- Preserve HTML tags, entities, and attributes exactly (do not translate tags or attribute names).
-- Preserve punctuation, Markdown, and capitalization style when appropriate.
-- Keep URLs and domains unchanged.
-- Return ONLY the translated string without quotes or extra commentary.
-- If the text is already a URL or looks untranslatable, return it unchanged.
 ```
 
 ## Workflow Examples
@@ -205,8 +200,9 @@ Rules:
 4. Review and commit changes
 
 ### Setting Up New Language
-1. Run: `vhtranslate -b locales/en.json -r it`
-2. All entries get translated for Italian
+1. Create empty `locales/it.json` file: `{}`
+2. Run: `vhtranslate -b locales/en.json -r it`
+3. All entries get translated for Italian
 
 ### Cross-Language Translation
 1. Translate from French to Spanish: `vhtranslate -b locales/fr.json -r es`
@@ -250,7 +246,7 @@ This is useful for:
 
 The translator provides the key name to the AI, allowing you to create key-specific translation rules:
 
-**custom-rules.txt example:**
+**custom-prompt.txt example:**
 ```text
 Translation Guidelines:
 - Keep technical terms like "VPN", "API", "JSON" untranslated
@@ -272,7 +268,7 @@ Key-Specific Rules:
 export GEMINI_API_KEY="your-api-key"
 
 # Optional
-export GEMINI_MODEL="gemini-2.5-flash-lite"  # Override default model
+export GEMINI_MODEL="gemini-2.5-flash"  # Override default model
 ```
 
 ## Best Practices
@@ -289,16 +285,17 @@ export GEMINI_MODEL="gemini-2.5-flash-lite"  # Override default model
 ### 2. Placeholder Usage
 ```json
 {
-  "GREETING": "Hello, {username}!",           
-  "MESSAGE": "You have {count} new messages"
+  "GREETING": "Hello, {username}!",           // ✅ Good
+  "MESSAGE": "You have {count} new messages", // ✅ Good
+  "WELCOME": "Welcome {0}!"                   // ❌ Avoid numbered placeholders
 }
 ```
 
 ### 3. HTML in Translations
 ```json
 {
-  "TERMS": "I agree to the <a href=\"/terms\">Terms of Service</a>",
-  "HIGHLIGHT": "This is <strong>important</strong> text"
+  "TERMS": "I agree to the <a href=\"/terms\">Terms of Service</a>",  // ✅ Good
+  "HIGHLIGHT": "This is <strong>important</strong> text"              // ✅ Good
 }
 ```
 
@@ -351,12 +348,5 @@ Error: Failed to parse base JSON
 
 ### Rate Limiting
 If you hit Gemini API rate limits:
-- Use `gemini-2.5-flash-lite` model (fast, cost-effective)
-- Process smaller batches with `-r` flag
+- Use `gemini-2.5-flash-lite` model (faster, cheaper)
 - Add delays between requests (built-in retry logic)
-
-### Quality Issues
-- Improve `translation-prompt.txt` with specific instructions
-- Use `custom-rules.txt` for domain-specific guidelines
-- Review and manually edit problematic translations
-- Use `-i` flag to prevent re-translation of manual fixes
