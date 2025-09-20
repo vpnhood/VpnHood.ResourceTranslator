@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.Text.Json;
+using VpnHood.ResourceTranslator.Models;
 
 namespace VpnHood.ResourceTranslator.Translators;
 
@@ -13,9 +14,9 @@ internal sealed class GeminiTranslator(
         BaseAddress = new Uri("https://generativelanguage.googleapis.com/")
     };
 
-    public async Task<string> TranslateAsync(string text, string sourceLang, string targetLang, string? extraPrompt, CancellationToken cancellationToken)
+    public async Task<string> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
     {
-        var prompt = BuildPrompt(text, sourceLang, targetLang, extraPrompt);
+        var prompt = BuildPromptAsync(promptOptions);
 
         var body = new
         {
@@ -49,29 +50,19 @@ internal sealed class GeminiTranslator(
         return txt ?? string.Empty;
     }
 
-    private static string BuildPrompt(string text, string sourceLang, string targetLang, string? extra)
+    private static string BuildPromptAsync(PromptOptions options)
     {
+        var template = options.Prompt;
+        
         var sb = new StringBuilder();
-        sb.AppendLine("You are an expert app localization system.");
-        sb.AppendLine("Task: Translate the given string from the source language to the target language.");
-        sb.AppendLine("Rules:");
-        sb.AppendLine("- Preserve placeholders exactly as-is: tokens in curly braces like {x}, {name}, {minutes}.");
-        sb.AppendLine("- Preserve HTML tags, entities, and attributes exactly (do not translate tags or attribute names).");
-        sb.AppendLine("- Preserve punctuation, Markdown, and capitalization style when appropriate.");
-        sb.AppendLine("- Keep URLs and domains unchanged.");
-        sb.AppendLine("- Return ONLY the translated string without quotes or extra commentary.");
-        sb.AppendLine("- If the text is already a URL or looks untranslatable, return it unchanged.");
-        if (!string.IsNullOrWhiteSpace(extra))
-        {
-            sb.AppendLine();
-            sb.AppendLine("Additional guidelines:");
-            sb.AppendLine(extra);
-        }
+        sb.AppendLine(template);
+        
         sb.AppendLine();
-        sb.AppendLine($"Source language: {sourceLang}");
-        sb.AppendLine($"Target language: {targetLang}");
+        sb.AppendLine($"Source language: {options.SourceLanguage}");
+        sb.AppendLine($"Target language: {options.TargetLanguage}");
         sb.AppendLine("Text:");
-        sb.AppendLine(text);
+        sb.AppendLine(options.Text);
+        
         return sb.ToString();
     }
 }

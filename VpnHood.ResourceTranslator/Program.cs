@@ -1,7 +1,9 @@
-﻿using System.Security.Cryptography;
+﻿using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using VpnHood.ResourceTranslator.Models;
 using VpnHood.ResourceTranslator.Translators;
 
 namespace VpnHood.ResourceTranslator;
@@ -27,8 +29,8 @@ internal static class Program
                 case "--en":
                     enPath = GetArgValue(args, ref i);
                     break;
-                case "-p":
-                case "--prompt":
+                case "-x":
+                case "--exceptions":
                     extraPromptPath = GetArgValue(args, ref i);
                     break;
                 case "-k":
@@ -52,8 +54,8 @@ internal static class Program
 
         if (string.IsNullOrWhiteSpace(enPath))
         {
-            PrintHelp();
-            return 0;
+            Console.Write("Enter path to en.json: ");
+            enPath = Console.ReadLine();
         }
 
         if (string.IsNullOrWhiteSpace(enPath))
@@ -72,14 +74,14 @@ internal static class Program
         string? extraPrompt = null;
         if (!string.IsNullOrWhiteSpace(extraPromptPath))
         {
-            var exceptionsFullPath = Path.GetFullPath(extraPromptPath);
-            if (!File.Exists(exceptionsFullPath))
+            var extraPromptFullPath = Path.GetFullPath(extraPromptPath);
+            if (!File.Exists(extraPromptFullPath))
             {
-                await Console.Error.WriteLineAsync($"Warning: Exceptions file not found: {exceptionsFullPath}");
+                await Console.Error.WriteLineAsync($"Warning: Extra prompt file not found: {extraPromptFullPath}");
             }
             else
             {
-                extraPrompt = await File.ReadAllTextAsync(exceptionsFullPath);
+                extraPrompt = await File.ReadAllTextAsync(extraPromptFullPath);
             }
         }
 
@@ -180,7 +182,8 @@ internal static class Program
                 }
                 else
                 {
-                    translated = await SafeTranslateAsync(translator, enText, "en", localeCode, extraPrompt);
+                    var promptOptions = BuildPromptOptions(enText, "en", localeCode, extraPrompt);
+                    translated = await SafeTranslateAsync(translator, promptOptions);
                     translated = PostProcessTranslation(enText, translated);
                     translatedCount++;
                 }
@@ -192,6 +195,28 @@ internal static class Program
         // Write JSON preserving base order
         await WriteJsonAsync(localePath, output);
         Console.WriteLine($"{Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
+    }
+
+    private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang, string? extraPrompt)
+    {
+        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process path.");
+        var promptFilePath = Path.Combine(Environment.ProcessPath, "translation-prompt.txt");
+        var prompt = new StringBuilder(File.ReadAllText(promptFilePath));
+        
+        if (!string.IsNullOrWhiteSpace(extraPrompt))
+        {
+            prompt.AppendLine();
+            prompt.AppendLine("Additional guidelines:");
+            prompt.AppendLine(extraPrompt);
+        }
+
+        return new PromptOptions
+        {
+            SourceLanguage = sourceLang,
+            TargetLanguage = targetLang,
+            Text = text,
+            Prompt = prompt.ToString()
+        };
     }
 
     private static string GetArgValue(string[] args, ref int i)
@@ -310,7 +335,7 @@ internal static class Program
         return s.Contains("://", StringComparison.Ordinal) || s.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<string> SafeTranslateAsync(ITranslator translator, string text, string sourceLang, string targetLang, string? extraPrompt)
+    private static async Task<string> SafeTranslateAsync(ITranslator translator, PromptOptions promptOptions)
     {
         // Retry a few times on transient failures
         var attempt = 0;
@@ -319,7 +344,7 @@ internal static class Program
         {
             try
             {
-                return await translator.TranslateAsync(text, sourceLang, targetLang, extraPrompt, CancellationToken.None);
+                return await translator.TranslateAsync(promptOptions, CancellationToken.None);
             }
             catch (Exception ex)
             {
