@@ -45,6 +45,7 @@ internal sealed class GeminiTranslator(
         sb.AppendLine();
         sb.AppendLine($"Source language: {options.SourceLanguage}");
         sb.AppendLine($"Target language: {options.TargetLanguage}");
+        sb.AppendLine($"Key: {options.Key}");
         sb.AppendLine("Text:");
         sb.AppendLine(options.Text);
 

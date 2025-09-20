@@ -212,10 +212,15 @@ internal static class Program
                 }
                 else
                 {
-                    var promptOptions = BuildPromptOptions(baseText, sourceLanguage, localeCode, prompt: prompt, extraPrompt: extraPrompt);
-                    translated = await SafeTranslateAsync(translator, promptOptions);
-                    translated = PostProcessTranslation(baseText, translated);
-                    translatedCount++;
+                    var promptOptions = BuildPromptOptions(baseText, sourceLanguage, localeCode, key, prompt: prompt, extraPrompt: extraPrompt);
+                    var aiResult = await SafeTranslateAsync(translator, promptOptions);
+                    
+                    // If AI returns "*", skip translation and keep existing value
+                    if (aiResult.Trim() != "*")
+                    {
+                        translated = PostProcessTranslation(baseText, aiResult);
+                        translatedCount++;
+                    }
 
                     if (isRebuild && translatedCount % 10 == 0)
                         Console.WriteLine($"  Progress: {translatedCount}/{totalKeys} ({(translatedCount * 100 / totalKeys):F0}%)");
@@ -237,7 +242,7 @@ internal static class Program
     }
 
     private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang,
-        string prompt, string? extraPrompt)
+        string key, string prompt, string? extraPrompt)
     {
         var promptBuilder = new StringBuilder(prompt);
 
@@ -253,6 +258,7 @@ internal static class Program
             SourceLanguage = sourceLang,
             TargetLanguage = targetLang,
             Text = text,
+            Key = key,
             Prompt = promptBuilder.ToString()
         };
     }

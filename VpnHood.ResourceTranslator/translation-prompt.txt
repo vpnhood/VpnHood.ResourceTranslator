@@ -7,3 +7,4 @@ Rules:
 - Keep URLs and domains unchanged.
 - Return ONLY the translated string without quotes or extra commentary.
 - If the text is already a URL or looks untranslatable, return it unchanged.
+- If you determine that a specific key should not be translated for the target language, return "*" to skip translation.

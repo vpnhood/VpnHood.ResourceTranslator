@@ -101,6 +101,14 @@ Use a different Gemini model:
 VpnHood.ResourceTranslator -b locales/en.json -m gemini-1.5-pro
 ```
 
+#### Skip Specific Translations
+Create custom rules to skip certain translations:
+```bash
+# Create custom-rules.txt with skip rules
+echo "For Chinese: Return '*' for any key containing 'PRIVACY' or 'LEGAL'" > custom-rules.txt
+VpnHood.ResourceTranslator -b locales/en.json -x custom-rules.txt
+```
+
 ## File Structure
 
 ### Input Files
@@ -216,7 +224,27 @@ Rules:
 3. Add new keys to base language file
 4. Run translator: only new keys get auto-translated
 
+### Selective Translation Workflow
+1. Create `skip-rules.txt` with language-specific skip rules:
+   ```text
+   For Chinese market: Skip "GOOGLE_PLAY_LINK" keys by returning "*"
+   For Arabic: Skip "FACEBOOK_SHARE" by returning "*" 
+   For Japanese: Skip keys containing "WESTERN" by returning "*"
+   ```
+2. Run: `VpnHood.ResourceTranslator -b locales/en.json -x skip-rules.txt`
+3. Certain keys remain untranslated based on cultural/regional appropriateness
+4. Manually handle skipped keys if needed
+
 ## Advanced Configuration
+
+### Skip Translation Feature
+
+The translator supports selective translation skipping. If the AI returns `"*"` as the translation, the tool will skip translating that specific key for that language and keep the existing value (or use the source text if missing).
+
+This is useful for:
+- Language-specific terms that shouldn't be translated
+- Cultural references that don't apply to certain regions
+- Technical terms that should remain in the source language
 
 ### Custom Prompt Template
 
@@ -234,10 +262,32 @@ RULES:
 - Keep HTML tags intact: <span class="class">text</span>
 - URLs and email addresses must remain unchanged
 - Technical terms: VPN, IP, DNS, UDP, TCP should not be translated
+- For Japanese: Skip translating "VPN" related keys by returning "*"
+- For Arabic: Skip "PRIVACY_POLICY_URL" key by returning "*"
 
 TONE: Professional but approachable, suitable for general users.
 
 OUTPUT: Return only the translated text, no quotes or explanations.
+OUTPUT: Return "*" to skip translation for specific key-language combinations.
+```
+
+### Using Key Information in Custom Prompts
+
+The translator provides the key name to the AI, allowing you to create key-specific translation rules:
+
+**custom-rules.txt example:**
+```text
+Translation Guidelines:
+- Keep technical terms like "VPN", "API", "JSON" untranslated
+- Brand name "VpnHood" should always remain unchanged
+- Use formal tone for German translations
+- For Spanish, use Latin American variants
+
+Key-Specific Rules:
+- PRIVACY_POLICY_URL: Return "*" for Chinese to skip translation
+- TECHNICAL_SUPPORT_EMAIL: Return "*" for all languages to keep original
+- APP_VERSION_INFO: Return "*" for Japanese, Korean to avoid translation
+- If key contains "DEBUG" or "DEVELOPER": Return "*" for all non-English languages
 ```
 
 ### Environment Variables
