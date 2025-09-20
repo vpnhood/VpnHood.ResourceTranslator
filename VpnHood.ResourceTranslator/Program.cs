@@ -252,6 +252,7 @@ internal static class Program
             TranslateResult[] results;
             try
             {
+                await Task.Delay(500, cts.Token); // brief pause to avoid rate limits
                 results = await translator.TranslateAsync(promptOptions, cts.Token);
             }
             catch (OperationCanceledException)
