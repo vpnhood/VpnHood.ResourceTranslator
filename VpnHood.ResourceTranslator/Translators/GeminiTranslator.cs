@@ -12,7 +12,7 @@ internal sealed class GeminiTranslator(
 {
     private readonly GoogleAI _googleAi = new(apiKey);
 
-    public async Task<string> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
+    public async Task<TranslateResult[]> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
     {
         var prompt = BuildPrompt(promptOptions);
 
@@ -25,30 +25,38 @@ internal sealed class GeminiTranslator(
         if (response.Text == null)
             throw new Exception("AI result is null");
 
-        return JsonSerializer.Deserialize<TranslateResult>(response.Text)?.TranslatedText
+        return JsonSerializer.Deserialize<TranslateResult[]>(response.Text)
             ?? throw new Exception("AI result deserialization failed");
     }
 
     private static string BuildPrompt(PromptOptions options)
     {
-        var template = options.Prompt;
-
         var sb = new StringBuilder();
-        sb.AppendLine(template);
+        sb.AppendLine(options.Prompt);
         sb.AppendLine();
-        sb.AppendLine("The output json format is: " + JsonSerializer.Serialize(new TranslateResult
-        {
-            Text = "SourceText",
-            TranslatedText = "TranslatedText"
-        }));
-
+        var sample = new TranslateResult[] {
+            new()
+            {
+                SourceLanguage = "en",
+                TargetLanguage = "fr",
+                Key = "Key1",
+                Text = "SourceText1",
+                TranslatedText = "TranslatedText1"
+            },
+            new()
+            {
+                SourceLanguage = "en",
+                TargetLanguage = "it",
+                Key = "Key2",
+                Text = "SourceText2",
+                TranslatedText = "TranslatedText2"
+            }
+        };
+        sb.AppendLine("The output format is json array.: " + JsonSerializer.Serialize(sample));
+        
         sb.AppendLine();
-        sb.AppendLine($"Source language: {options.SourceLanguage}");
-        sb.AppendLine($"Target language: {options.TargetLanguage}");
-        sb.AppendLine($"Key: {options.Key}");
-        sb.AppendLine("Text:");
-        sb.AppendLine(options.Text);
-
+        sb.AppendLine("The items need to be translated:");
+        sb.AppendLine($"Source language: {JsonSerializer.Serialize(options.Items)}");
         return sb.ToString();
     }
 }
