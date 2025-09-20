@@ -245,31 +245,6 @@ This is useful for:
 - Cultural references that don't apply to certain regions
 - Technical terms that should remain in the source language
 
-### Custom Prompt Template
-
-Edit `translation-prompt.txt` to customize AI behavior:
-
-```text
-You are a professional translator specializing in mobile app localization.
-
-CONTEXT: This is for a VPN application interface.
-
-RULES:
-- Use concise, user-friendly language
-- Maintain consistent terminology across all strings
-- Preserve all placeholders: {variable_name}
-- Keep HTML tags intact: <span class="class">text</span>
-- URLs and email addresses must remain unchanged
-- Technical terms: VPN, IP, DNS, UDP, TCP should not be translated
-- For Japanese: Skip translating "VPN" related keys by returning "*"
-- For Arabic: Skip "PRIVACY_POLICY_URL" key by returning "*"
-
-TONE: Professional but approachable, suitable for general users.
-
-OUTPUT: Return only the translated text, no quotes or explanations.
-OUTPUT: Return "*" to skip translation for specific key-language combinations.
-```
-
 ### Using Key Information in Custom Prompts
 
 The translator provides the key name to the AI, allowing you to create key-specific translation rules:
@@ -298,12 +273,6 @@ export GEMINI_API_KEY="your-api-key"
 # Optional
 export GEMINI_MODEL="gemini-1.5-pro"  # Override default model
 ```
-
-### Supported Models
-
-- `gemini-1.5-flash` (default) - Fast and cost-effective
-- `gemini-1.5-pro` - Higher quality, slower
-- `gemini-1.0-pro` - Legacy model
 
 ## Best Practices
 
@@ -391,11 +360,3 @@ If you hit Gemini API rate limits:
 - Use `custom-rules.txt` for domain-specific guidelines
 - Review and manually edit problematic translations
 - Use `-i` flag to prevent re-translation of manual fixes
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
