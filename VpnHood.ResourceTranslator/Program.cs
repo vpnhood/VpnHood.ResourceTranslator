@@ -122,9 +122,7 @@ internal static class Program
             .ToList();
 
         if (files.Count == 0)
-        {
             Console.WriteLine("No sibling locale files found to translate.");
-        }
 
         foreach (var localePath in files)
         {

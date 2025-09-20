@@ -1,5 +1,5 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using Mscc.GenerativeAI;
+using System.Text;
 using VpnHood.ResourceTranslator.Models;
 
 namespace VpnHood.ResourceTranslator.Translators;
@@ -9,48 +9,22 @@ internal sealed class GeminiTranslator(
     string model) 
     : ITranslator
 {
-    private readonly HttpClient _http = new()
-    {
-        BaseAddress = new Uri("https://generativelanguage.googleapis.com/")
-    };
+    private readonly GoogleAI _googleAi = new(apiKey);
 
     public async Task<string> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
     {
-        var prompt = BuildPromptAsync(promptOptions);
-
-        var body = new
+        var prompt = BuildPrompt(promptOptions);
+        
+        var geminiModel = _googleAi.GenerativeModel(model: model);
+        var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
         {
-            contents = new[]
-            {
-                new
-                {
-                    role = "user",
-                    parts = new[] { new { text = prompt } }
-                }
-            }
-        };
-
-        var url = $"v1beta/models/{model}:generateContent?key={apiKey}";
-        using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-
-        using var resp = await _http.SendAsync(req, cancellationToken);
-        var payload = await resp.Content.ReadAsStringAsync(cancellationToken);
-        if (!resp.IsSuccessStatusCode)
-        {
-            throw new Exception($"Gemini API error {(int)resp.StatusCode}: {payload}");
-        }
-
-        using var doc = JsonDocument.Parse(payload);
-        var root = doc.RootElement;
-        var candidate = root.GetProperty("candidates")[0];
-        var content = candidate.GetProperty("content");
-        var parts = content.GetProperty("parts");
-        var txt = parts[0].GetProperty("text").GetString();
-        return txt ?? string.Empty;
+            ResponseMimeType = "application/json",
+        }, cancellationToken: cancellationToken);
+        
+        return response?.Text ?? string.Empty;
     }
 
-    private static string BuildPromptAsync(PromptOptions options)
+    private static string BuildPrompt(PromptOptions options)
     {
         var template = options.Prompt;
         
