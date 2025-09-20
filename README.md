@@ -204,9 +204,8 @@ Rules:
 4. Review and commit changes
 
 ### Setting Up New Language
-1. Create empty `locales/it.json` file: `{}`
-2. Run: `VpnHood.ResourceTranslator -b locales/en.json -r it`
-3. All entries get translated for Italian
+1. Run: `VpnHood.ResourceTranslator -b locales/en.json -r it`
+2. All entries get translated for Italian
 
 ### Cross-Language Translation
 1. Translate from French to Spanish: `VpnHood.ResourceTranslator -b locales/fr.json -r es`
