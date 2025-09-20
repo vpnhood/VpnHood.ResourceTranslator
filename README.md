@@ -288,17 +288,16 @@ export GEMINI_MODEL="gemini-1.5-pro"  # Override default model
 ### 2. Placeholder Usage
 ```json
 {
-  "GREETING": "Hello, {username}!",           // ✅ Good
-  "MESSAGE": "You have {count} new messages", // ✅ Good
-  "WELCOME": "Welcome {0}!"                   // ❌ Avoid numbered placeholders
+  "GREETING": "Hello, {username}!",           
+  "MESSAGE": "You have {count} new messages"
 }
 ```
 
 ### 3. HTML in Translations
 ```json
 {
-  "TERMS": "I agree to the <a href=\"/terms\">Terms of Service</a>",  // ✅ Good
-  "HIGHLIGHT": "This is <strong>important</strong> text"              // ✅ Good
+  "TERMS": "I agree to the <a href=\"/terms\">Terms of Service</a>",
+  "HIGHLIGHT": "This is <strong>important</strong> text"
 }
 ```
 
