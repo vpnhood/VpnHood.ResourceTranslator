@@ -47,7 +47,8 @@ Options:
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
   -i, --ignore-changes       Rebuild hash file to mark all entries as current
   -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)
-  -m, --model <name>         Gemini model (default: gemini-1.5-flash)
+  -m, --model <name>         Gemini model (default: gemini-2.5-flash-lite)
+  -n, --batch <number>       Batch size for translation requests (default: 20)
   -h, --help                 Show help
 ```
 
@@ -271,7 +272,7 @@ Key-Specific Rules:
 export GEMINI_API_KEY="your-api-key"
 
 # Optional
-export GEMINI_MODEL="gemini-1.5-pro"  # Override default model
+export GEMINI_MODEL="gemini-2.5-flash-lite"  # Override default model
 ```
 
 ## Best Practices
@@ -350,7 +351,7 @@ Error: Failed to parse base JSON
 
 ### Rate Limiting
 If you hit Gemini API rate limits:
-- Use `gemini-1.5-flash` model (faster, cheaper)
+- Use `gemini-2.5-flash-lite` model (fast, cost-effective)
 - Process smaller batches with `-r` flag
 - Add delays between requests (built-in retry logic)
 

@@ -9,7 +9,9 @@ namespace VpnHood.ResourceTranslator;
 
 internal static class Program
 {
-    private const string DefaultModel = "gemini-1.5-flash"; // Can be overridden via --model
+    private const string DefaultModel = "gemini-2.5-flash-lite"; // Can be overridden via --model
+    private const int DefaultBatchSize = 20;
+    private const int DefaultTranslateTimeoutSeconds = 60;
 
     private static async Task<int> Main(string[] args)
     {
@@ -21,6 +23,7 @@ internal static class Program
         var showChanges = false;
         string? rebuildLang = null;
         var rebuildHashes = false;
+        var batchSize = DefaultBatchSize;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -54,6 +57,14 @@ internal static class Program
                 case "--ignore-changes":
                     rebuildHashes = true;
                     break;
+                case "-n":
+                case "--batch":
+                {
+                    var val = GetArgValue(args, ref i);
+                    if (int.TryParse(val, out var n) && n > 0)
+                        batchSize = n;
+                    break;
+                }
                 case "-h":
                 case "--help":
                     PrintHelp();
@@ -147,7 +158,7 @@ internal static class Program
         {
             var rebuildPath = Path.Combine(dir, $"{rebuildLang}.json");
             await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
-                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, isRebuild: true);
+                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: batchSize, isRebuild: true);
         }
         else
         {
@@ -157,7 +168,7 @@ internal static class Program
             foreach (var localePath in files)
             {
                 await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
-                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, isRebuild: false);
+                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: batchSize);
             }
         }
 
@@ -176,6 +187,7 @@ internal static class Program
         string prompt,
         string? extraPrompt,
         string sourceLanguage,
+        int batchSize,
         bool isRebuild = false)
     {
         var localeCode = Path.GetFileNameWithoutExtension(localePath);
@@ -197,37 +209,74 @@ internal static class Program
         else if (missingKeys.Count > 0)
             Console.WriteLine($"Processing {Path.GetFileName(localePath)} ({localeCode}) - {changedKeys.Count} changed, {missingKeys.Count} missing entries...");
 
+        // Pre-populate output with existing values or base for URLs
+        var itemsToTranslate = new List<TranslateItem>(totalKeys);
         foreach (var key in orderedKeys)
         {
             var baseText = baseMap[key];
-            var translated = localeMap.TryGetValue(key, out var value) ? value : string.Empty;
-            var isMissing = !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(translated);
+            var hasExisting = localeMap.TryGetValue(key, out var existingValue) && !string.IsNullOrWhiteSpace(existingValue);
+            var isMissing = !hasExisting;
             var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
 
-            if (needsTranslation)
+            if (needsTranslation && LooksLikeUrl(baseText))
             {
-                if (LooksLikeUrl(baseText))
-                {
-                    translated = baseText; // keep URLs as-is
-                }
-                else
-                {
-                    var promptOptions = BuildPromptOptions(baseText, sourceLanguage, localeCode, key, prompt: prompt, extraPrompt: extraPrompt);
-                    var aiResult = await SafeTranslateAsync(translator, promptOptions);
-                    
-                    // If AI returns "*", skip translation and keep existing value
-                    if (aiResult.Trim() != "*")
-                    {
-                        translated = PostProcessTranslation(baseText, aiResult);
-                        translatedCount++;
-                    }
-
-                    if (isRebuild && translatedCount % 10 == 0)
-                        Console.WriteLine($"  Progress: {translatedCount}/{totalKeys} ({(translatedCount * 100 / totalKeys):F0}%)");
-                }
+                output[key] = baseText; // keep URLs as-is
+                continue;
             }
 
-            output[key] = translated;
+            // default output is the existing translation if any, or empty
+            output[key] = hasExisting ? existingValue : string.Empty;
+
+            if (needsTranslation && !LooksLikeUrl(baseText))
+            {
+                itemsToTranslate.Add(new TranslateItem
+                {
+                    SourceLanguage = sourceLanguage,
+                    TargetLanguage = localeCode,
+                    Key = key,
+                    Text = baseText
+                });
+            }
+        }
+
+        // Batch translate items
+        for (int i = 0; i < itemsToTranslate.Count; i += Math.Max(1, batchSize))
+        {
+            var batch = itemsToTranslate.Skip(i).Take(Math.Max(1, batchSize)).ToArray();
+            if (batch.Length == 0) break;
+
+            var promptOptions = BuildPromptOptionsForBatch(batch, prompt, extraPrompt);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
+            TranslateResult[] results;
+            try
+            {
+                results = await translator.TranslateAsync(promptOptions, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {i}. Skipping this batch.");
+                continue;
+            }
+
+            foreach (var res in results)
+            {
+                // Skip if instructed
+                if (res.TranslatedText.Trim() == "*")
+                    continue;
+
+                // Post-process and apply
+                var baseText = baseMap.GetValueOrDefault(res.Key, string.Empty);
+                var finalText = PostProcessTranslation(baseText, res.TranslatedText);
+                output[res.Key] = finalText;
+                translatedCount++;
+            }
+
+            if (isRebuild)
+            {
+                var done = Math.Min(i + batch.Length, itemsToTranslate.Count);
+                Console.WriteLine($"  Progress: {done}/{itemsToTranslate.Count} ({(done * 100 / Math.Max(1, itemsToTranslate.Count)):F0}%)");
+            }
         }
 
         // Write JSON preserving base order
@@ -241,8 +290,7 @@ internal static class Program
             Console.WriteLine($"  {Path.GetFileName(localePath)}: Up to date, no changes needed.");
     }
 
-    private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang,
-        string key, string prompt, string? extraPrompt)
+    private static PromptOptions BuildPromptOptionsForBatch(TranslateItem[] items, string prompt, string? extraPrompt)
     {
         var promptBuilder = new StringBuilder(prompt);
 
@@ -255,11 +303,8 @@ internal static class Program
 
         return new PromptOptions
         {
-            SourceLanguage = sourceLang,
-            TargetLanguage = targetLang,
-            Text = text,
-            Key = key,
-            Prompt = promptBuilder.ToString()
+            Prompt = promptBuilder.ToString(),
+            Items = items
         };
     }
 
@@ -280,7 +325,8 @@ internal static class Program
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
         Console.WriteLine("  -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)");
-        Console.WriteLine("  -m, --model <name>         Gemini model (default: gemini-1.5-flash)");
+        Console.WriteLine("  -m, --model <name>         Gemini model (default: gemini-2.5-flash-lite)");
+        Console.WriteLine("  -n, --batch <number>       Batch size for translation requests (default: 20)");
         Console.WriteLine("  -h, --help                 Show help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
@@ -389,27 +435,6 @@ internal static class Program
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
         return s.Contains("://", StringComparison.Ordinal) || s.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static async Task<string> SafeTranslateAsync(ITranslator translator, PromptOptions promptOptions)
-    {
-        // Retry a few times on transient failures
-        var attempt = 0;
-        Exception? lastEx = null;
-        while (attempt < 3)
-        {
-            try
-            {
-                return await translator.TranslateAsync(promptOptions, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                lastEx = ex;
-                await Task.Delay(500 * (attempt + 1));
-            }
-            attempt++;
-        }
-        throw new Exception($"Translation failed after retries: {lastEx?.Message}", lastEx);
     }
 
     private static string PostProcessTranslation(string source, string? translated)
