@@ -319,7 +319,7 @@ internal static class Program
     private static void PrintHelp()
     {
         Console.WriteLine("Resource Translator");
-        Console.WriteLine("Usage: vhtranslate [options]");
+        Console.WriteLine("Usage: vhtranslator [options]");
         Console.WriteLine("Options:");
         Console.WriteLine("  -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)");
         Console.WriteLine("  -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt");
@@ -332,10 +332,10 @@ internal static class Program
         Console.WriteLine("  -h, --help                 Show help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  vhtranslate -b locales/en.json");
-        Console.WriteLine("  vhtranslate -b locales/fr.json -r es");
-        Console.WriteLine("  vhtranslate -b locales/en.json -x custom-prompt.txt");
-        Console.WriteLine("  vhtranslate -b locales/de.json -c");
+        Console.WriteLine("  vhtranslator -b locales/en.json");
+        Console.WriteLine("  vhtranslator -b locales/fr.json -r es");
+        Console.WriteLine("  vhtranslator -b locales/en.json -x custom-prompt.txt");
+        Console.WriteLine("  vhtranslator -b locales/de.json -c");
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - Any language can be used as the base source for translations");
@@ -432,10 +432,10 @@ internal static class Program
 
     private static string GetHashesFilePath(string basePath)
     {
-        // Location: <baseDir>/vh_translate/<baseLang>_watch.json
+        // Location: <baseDir>/vh_translator/<baseLang>_watch.json
         var baseDir = Path.GetDirectoryName(basePath)!;
         var baseLang = Path.GetFileNameWithoutExtension(basePath);
-        return Path.Combine(baseDir, "vh_translate", $"{baseLang}_watch.json");
+        return Path.Combine(baseDir, "vh_translator", $"{baseLang}_watch.json");
     }
 
     private static bool LooksLikeUrl(string s)

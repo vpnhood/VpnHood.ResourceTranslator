@@ -37,7 +37,7 @@ dotnet build --configuration Release
 
 2. **Basic translation**:
    ```bash
-   vhtranslate -b locales/en.json
+   vhtranslator -b locales/en.json
    ```
 
 ## Usage
@@ -45,7 +45,7 @@ dotnet build --configuration Release
 ### Command Line Options
 
 ```
-vhtranslate [options]
+vhtranslator [options]
 
 Options:
   -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)
@@ -64,49 +64,49 @@ Options:
 #### Basic Translation (English as Source)
 Translate all locale files using English as the base:
 ```bash
-vhtranslate -b locales/en.json
+vhtranslator -b locales/en.json
 ```
 
 #### Use French as Source Language
 Translate from French to other languages:
 ```bash
-vhtranslate -b locales/fr.json
+vhtranslator -b locales/fr.json
 ```
 
 #### Force Rebuild a Language
 Retranslate all entries for Spanish from English base:
 ```bash
-vhtranslate -b locales/en.json -r es
+vhtranslator -b locales/en.json -r es
 ```
 
 #### Cross-Language Translation
 Translate from German to Spanish:
 ```bash
-vhtranslate -b locales/de.json -r es
+vhtranslator -b locales/de.json -r es
 ```
 
 #### Show What Changed
 See which keys have changed since last translation:
 ```bash
-vhtranslate -b locales/en.json -c
+vhtranslator -b locales/en.json -c
 ```
 
 #### Use Custom Instructions
 Add custom translation rules via a text file:
 ```bash
-vhtranslate -b locales/en.json -x custom-prompt.txt
+vhtranslator -b locales/en.json -x custom-prompt.txt
 ```
 
 #### Reset Hash State
 Mark all entries as current without translating:
 ```bash
-vhtranslate -b locales/en.json -i
+vhtranslator -b locales/en.json -i
 ```
 
 #### Use Different Model
 Use a different Gemini model:
 ```bash
-vhtranslate -b locales/en.json -m gemini-2.5-pro
+vhtranslator -b locales/en.json -m gemini-2.5-pro
 ```
 
 #### Skip Specific Translations
@@ -114,7 +114,7 @@ Create custom rules to skip certain translations:
 ```bash
 # Create custom-prompt.txt with skip rules
 echo "For Chinese: Return '*' for any key containing 'PRIVACY' or 'LEGAL'" > custom-prompt.txt
-vhtranslate -b locales/en.json -x custom-prompt.txt
+vhtranslator -b locales/en.json -x custom-prompt.txt
 ```
 
 ## File Structure
@@ -130,7 +130,7 @@ locales/
 +-- fr.json              # French translations
 +-- es.json              # Spanish translations
 +-- de.json              # German translations
-+-- vh_translate/
++-- vh_translator/
     +-- en_watch.json    # Hash tracking file (auto-generated)
 ```
 
@@ -141,13 +141,13 @@ locales/
 +-- en.json              # English translations
 +-- es.json              # Spanish translations
 +-- de.json              # German translations
-+-- vh_translate/
++-- vh_translator/
     +-- fr_watch.json    # Hash tracking file (auto-generated)
 ```
 
 ### Generated Files
 
-- `vh_translate/<base>_watch.json` - Tracks changes to detect what needs retranslation
+- `vh_translator/<base>_watch.json` - Tracks changes to detect what needs retranslation
 
 ## Sample Files
 
@@ -195,28 +195,28 @@ Translation Guidelines:
 
 ### Daily Development Workflow
 1. Add new keys to your base language file (e.g., `en.json`)
-2. Run translator: `vhtranslate -b locales/en.json`
+2. Run translator: `vhtranslator -b locales/en.json`
 3. Only new/changed keys get translated
 4. Review and commit changes
 
 ### Setting Up New Language
 1. Create empty `locales/it.json` file: `{}`
-2. Run: `vhtranslate -b locales/en.json -r it`
+2. Run: `vhtranslator -b locales/en.json -r it`
 3. All entries get translated for Italian
 
 ### Cross-Language Translation
-1. Translate from French to Spanish: `vhtranslate -b locales/fr.json -r es`
-2. Use German as source for Italian: `vhtranslate -b locales/de.json -r it`
+1. Translate from French to Spanish: `vhtranslator -b locales/fr.json -r es`
+2. Use German as source for Italian: `vhtranslator -b locales/de.json -r it`
 3. Mix and match source languages as needed
 
 ### Quality Control Workflow
 1. Improve your `translation-prompt.txt`
-2. Rebuild all languages: `vhtranslate -b locales/en.json -r fr`
+2. Rebuild all languages: `vhtranslator -b locales/en.json -r fr`
 3. Compare results and iterate
 
 ### Mixed Manual/Auto Workflow
 1. Manually fix some translations in `fr.json`
-2. Mark as current: `vhtranslate -b locales/en.json -i`
+2. Mark as current: `vhtranslator -b locales/en.json -i`
 3. Add new keys to base language file
 4. Run translator: only new keys get auto-translated
 
@@ -227,7 +227,7 @@ Translation Guidelines:
    For Arabic: Skip "FACEBOOK_SHARE" by returning "*" 
    For Japanese: Skip keys containing "WESTERN" by returning "*"
    ```
-2. Run: `vhtranslate -b locales/en.json -x skip-rules.txt`
+2. Run: `vhtranslator -b locales/en.json -x skip-rules.txt`
 3. Certain keys remain untranslated based on cultural/regional appropriateness
 4. Manually handle skipped keys if needed
 
@@ -302,10 +302,10 @@ export GEMINI_MODEL="gemini-2.5-flash"  # Override default model
 ### 4. Regular Workflow
 ```bash
 # 1. Check what changed
-vhtranslate -b locales/en.json -c
+vhtranslator -b locales/en.json -c
 
 # 2. Translate changes
-vhtranslate -b locales/en.json
+vhtranslator -b locales/en.json
 
 # 3. Review and commit
 git add locales/
@@ -315,13 +315,13 @@ git commit -m "Update translations"
 ### 5. Multi-Source Workflows
 ```bash
 # Use English as primary source
-vhtranslate -b locales/en.json
+vhtranslator -b locales/en.json
 
 # But translate French to German directly for better accuracy
-vhtranslate -b locales/fr.json -r de
+vhtranslator -b locales/fr.json -r de
 
 # Or use Spanish as source for Portuguese
-vhtranslate -b locales/es.json -r pt
+vhtranslator -b locales/es.json -r pt
 ```
 
 ## Troubleshooting
