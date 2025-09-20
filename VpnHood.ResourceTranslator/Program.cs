@@ -14,7 +14,7 @@ internal static class Program
     {
         // Simple args parsing
         string? enPath = null;
-        string? exceptionsPath = null;
+        string? extraPromptPath = null;
         string? apiKey = null;
         var model = DefaultModel;
         var showChanges = false;
@@ -27,9 +27,9 @@ internal static class Program
                 case "--en":
                     enPath = GetArgValue(args, ref i);
                     break;
-                case "-x":
-                case "--exceptions":
-                    exceptionsPath = GetArgValue(args, ref i);
+                case "-p":
+                case "--prompt":
+                    extraPromptPath = GetArgValue(args, ref i);
                     break;
                 case "-k":
                 case "--api-key":
@@ -52,8 +52,8 @@ internal static class Program
 
         if (string.IsNullOrWhiteSpace(enPath))
         {
-            Console.Write("Enter path to en.json: ");
-            enPath = Console.ReadLine();
+            PrintHelp();
+            return 0;
         }
 
         if (string.IsNullOrWhiteSpace(enPath))
@@ -70,9 +70,9 @@ internal static class Program
         }
 
         string? extraPrompt = null;
-        if (!string.IsNullOrWhiteSpace(exceptionsPath))
+        if (!string.IsNullOrWhiteSpace(extraPromptPath))
         {
-            var exceptionsFullPath = Path.GetFullPath(exceptionsPath);
+            var exceptionsFullPath = Path.GetFullPath(extraPromptPath);
             if (!File.Exists(exceptionsFullPath))
             {
                 await Console.Error.WriteLineAsync($"Warning: Exceptions file not found: {exceptionsFullPath}");
@@ -169,7 +169,7 @@ internal static class Program
         foreach (var key in orderedKeys)
         {
             var enText = enMap[key];
-            var translated = localeMap.ContainsKey(key) ? localeMap[key] : string.Empty;
+            var translated = localeMap.TryGetValue(key, out var value) ? value : string.Empty;
             var needsTranslation = changedKeys.Contains(key) || !localeMap.ContainsKey(key);
 
             if (needsTranslation)
