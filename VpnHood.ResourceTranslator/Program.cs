@@ -272,7 +272,7 @@ internal static class Program
     private static void PrintHelp()
     {
         Console.WriteLine("Resource Translator");
-        Console.WriteLine("Usage: VpnHood.ResourceTranslator [options]");
+        Console.WriteLine("Usage: vhtranslate [options]");
         Console.WriteLine("Options:");
         Console.WriteLine("  -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)");
         Console.WriteLine("  -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt");
@@ -284,10 +284,10 @@ internal static class Program
         Console.WriteLine("  -h, --help                 Show help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/en.json");
-        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/fr.json -r es");
-        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/en.json -x custom-rules.txt");
-        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/de.json -c");
+        Console.WriteLine("  vhtranslate -b locales/en.json");
+        Console.WriteLine("  vhtranslate -b locales/fr.json -r es");
+        Console.WriteLine("  vhtranslate -b locales/en.json -x custom-rules.txt");
+        Console.WriteLine("  vhtranslate -b locales/de.json -c");
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - Any language can be used as the base source for translations");
