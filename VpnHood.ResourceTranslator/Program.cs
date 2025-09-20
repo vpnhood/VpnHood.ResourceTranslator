@@ -20,6 +20,7 @@ internal static class Program
         var model = DefaultModel;
         var showChanges = false;
         string? rebuildLang = null;
+        var rebuildHashes = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -30,7 +31,7 @@ internal static class Program
                     enPath = GetArgValue(args, ref i);
                     break;
                 case "-x":
-                case "--exceptions":
+                case "--extra-prompt":
                     extraPromptPath = GetArgValue(args, ref i);
                     break;
                 case "-k":
@@ -48,6 +49,10 @@ internal static class Program
                 case "-r":
                 case "--rebuild-lang":
                     rebuildLang = GetArgValue(args, ref i);
+                    break;
+                case "-i":
+                case "--ignore-changes":
+                    rebuildHashes = true;
                     break;
                 case "-h":
                 case "--help":
@@ -90,12 +95,20 @@ internal static class Program
             return 3;
         }
 
-        var orderedKeys = enObj.Select(p => p.Key).ToList();
-        var enMap = enObj.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
+        var orderedKeys = enObj!.Select(p => p.Key).ToList();
+        var enMap = enObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
 
         // Compute current hashes
         var currentHashes = ComputeHashes(enMap);
         var previousHashes = await LoadHashesAsync(hashPath);
+
+        // Handle rebuild hashes only
+        if (rebuildHashes)
+        {
+            await SaveHashesAsync(hashPath, currentHashes);
+            Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
+            return 0;
+        }
 
         var changedKeys = DetermineChangedKeys(enMap.Keys, currentHashes, previousHashes);
 
@@ -173,15 +186,19 @@ internal static class Program
         var output = new JsonObject();
         var translatedCount = 0;
         var totalKeys = orderedKeys.Count;
+        var missingKeys = orderedKeys.Where(key => !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(localeMap[key])).ToList();
 
         if (isRebuild)
             Console.WriteLine($"Rebuilding {Path.GetFileName(localePath)} ({localeCode}) - translating all {totalKeys} keys...");
+        else if (missingKeys.Count > 0)
+            Console.WriteLine($"Processing {Path.GetFileName(localePath)} ({localeCode}) - {changedKeys.Count} changed, {missingKeys.Count} missing entries...");
 
         foreach (var key in orderedKeys)
         {
             var enText = enMap[key];
             var translated = localeMap.TryGetValue(key, out var value) ? value : string.Empty;
-            var needsTranslation = isRebuild || changedKeys.Contains(key) || !localeMap.ContainsKey(key);
+            var isMissing = !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(translated);
+            var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
 
             if (needsTranslation)
             {
@@ -209,8 +226,10 @@ internal static class Program
         
         if (isRebuild)
             Console.WriteLine($"✓ {Path.GetFileName(localePath)}: Rebuilt with {translatedCount} translations.");
+        else if (translatedCount > 0)
+            Console.WriteLine($"✓ {Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
         else
-            Console.WriteLine($"{Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
+            Console.WriteLine($"  {Path.GetFileName(localePath)}: Up to date, no changes needed.");
     }
 
     private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang,
@@ -246,9 +265,10 @@ internal static class Program
         Console.WriteLine("Usage: VpnHood.ResourceTranslator [options]");
         Console.WriteLine("Options:");
         Console.WriteLine("  -e, --en <path>            Path to base en.json");
-        Console.WriteLine("  -x, --exceptions <path>    Path to extra instructions text file for the AI prompt");
+        Console.WriteLine("  -x, extra-prompt <path>    Path to extra instructions text file for the AI prompt");
         Console.WriteLine("  -c, --show-changes         Show changed keys since last translation and exit");
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
+        Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
         Console.WriteLine("  -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)");
         Console.WriteLine("  -m, --model <name>         Gemini model (default: gemini-1.5-flash)");
         Console.WriteLine("  -h, --help                 Show help");
@@ -257,6 +277,10 @@ internal static class Program
         Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json");
         Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -r fr");
         Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -x custom-rules.txt");
+        Console.WriteLine();
+        Console.WriteLine("Notes:");
+        Console.WriteLine("  - Missing entries in target languages are always translated regardless of hash changes");
+        Console.WriteLine("  - Use --rebuild-hashes after manual translations to avoid re-translating unchanged entries");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
