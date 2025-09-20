@@ -8,6 +8,7 @@ An intelligent i18n resource translator that uses Google's Gemini AI to automati
 - 🔄 **Incremental Updates** - Only translates changed entries using hash-based tracking
 - 🎯 **Smart Placeholder Preservation** - Keeps `{variables}`, HTML tags, and URLs intact
 - 📁 **Batch Processing** - Translates multiple language files simultaneously
+- 🌐 **Flexible Source Language** - Use any language as the base source (not just English)
 - 🔧 **Customizable Prompts** - Template-based prompts with custom instructions
 - 📊 **Progress Tracking** - Real-time progress for large translation jobs
 - 🛡️ **Robust Error Handling** - Automatic retries and detailed error messages
@@ -15,18 +16,21 @@ An intelligent i18n resource translator that uses Google's Gemini AI to automati
 ## Installation
 
 ### Prerequisites
+- .NET 8.0 or later
 - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
 
-
 ## Quick Start
+
 1. **Set your API key**:
-   ```
+   ```bash
+   export GEMINI_API_KEY="your-api-key-here"
+   # or on Windows:
    set GEMINI_API_KEY=your-api-key-here
    ```
 
 2. **Basic translation**:
    ```bash
-   VpnHood.ResourceTranslator -e locales/en.json
+   VpnHood.ResourceTranslator -b locales/en.json
    ```
 
 ## Usage
@@ -37,7 +41,7 @@ An intelligent i18n resource translator that uses Google's Gemini AI to automati
 VpnHood.ResourceTranslator [options]
 
 Options:
-  -e, --en <path>            Path to base en.json
+  -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)
   -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt
   -c, --show-changes         Show changed keys since last translation and exit
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
@@ -49,59 +53,83 @@ Options:
 
 ### Examples
 
-#### Basic Translation
-Translate all locale files in the same directory as `en.json`:
+#### Basic Translation (English as Source)
+Translate all locale files using English as the base:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json
+VpnHood.ResourceTranslator -b locales/en.json
+```
+
+#### Use French as Source Language
+Translate from French to other languages:
+```bash
+VpnHood.ResourceTranslator -b locales/fr.json
 ```
 
 #### Force Rebuild a Language
-Retranslate all entries for French, ignoring hash changes:
+Retranslate all entries for Spanish from English base:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json -r fr
+VpnHood.ResourceTranslator -b locales/en.json -r es
+```
+
+#### Cross-Language Translation
+Translate from German to Spanish:
+```bash
+VpnHood.ResourceTranslator -b locales/de.json -r es
 ```
 
 #### Show What Changed
 See which keys have changed since last translation:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json -c
+VpnHood.ResourceTranslator -b locales/en.json -c
 ```
 
 #### Use Custom Instructions
 Add custom translation rules via a text file:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json -x custom-rules.txt
+VpnHood.ResourceTranslator -b locales/en.json -x custom-rules.txt
 ```
 
 #### Reset Hash State
 Mark all entries as current without translating:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json -i
+VpnHood.ResourceTranslator -b locales/en.json -i
 ```
 
 #### Use Different Model
 Use a different Gemini model:
 ```bash
-VpnHood.ResourceTranslator -e locales/en.json -m gemini-1.5-pro
+VpnHood.ResourceTranslator -b locales/en.json -m gemini-1.5-pro
 ```
 
 ## File Structure
 
 ### Input Files
 
-Your locale directory should look like this:
+Your locale directory can have any language as the base:
+
+**English as Base:**
 ```
 locales/
-├── en.json              # Base English file (required)
+├── en.json              # Base English file
 ├── fr.json              # French translations
 ├── es.json              # Spanish translations
 ├── de.json              # German translations
 └── en.json.hashes.json  # Hash tracking file (auto-generated)
 ```
 
+**French as Base:**
+```
+locales/
+├── fr.json              # Base French file
+├── en.json              # English translations
+├── es.json              # Spanish translations
+├── de.json              # German translations
+└── fr.json.hashes.json  # Hash tracking file (auto-generated)
+```
+
 ### Generated Files
 
-- `en.json.hashes.json` - Tracks changes to detect what needs retranslation
+- `{base}.json.hashes.json` - Tracks changes to detect what needs retranslation
 - `translation-prompt.txt` - Default AI prompt template (customizable)
 
 ## Sample Files
@@ -162,25 +190,30 @@ Rules:
 ## Workflow Examples
 
 ### Daily Development Workflow
-1. Add new keys to `en.json`
-2. Run translator: `VpnHood.ResourceTranslator -e locales/en.json`
+1. Add new keys to your base language file (e.g., `en.json`)
+2. Run translator: `VpnHood.ResourceTranslator -b locales/en.json`
 3. Only new/changed keys get translated
 4. Review and commit changes
 
 ### Setting Up New Language
 1. Create empty `locales/it.json` file: `{}`
-2. Run: `VpnHood.ResourceTranslator -e locales/en.json -r it`
+2. Run: `VpnHood.ResourceTranslator -b locales/en.json -r it`
 3. All entries get translated for Italian
+
+### Cross-Language Translation
+1. Translate from French to Spanish: `VpnHood.ResourceTranslator -b locales/fr.json -r es`
+2. Use German as source for Italian: `VpnHood.ResourceTranslator -b locales/de.json -r it`
+3. Mix and match source languages as needed
 
 ### Quality Control Workflow
 1. Improve your `translation-prompt.txt`
-2. Rebuild all languages: `VpnHood.ResourceTranslator -e locales/en.json -r fr`
+2. Rebuild all languages: `VpnHood.ResourceTranslator -b locales/en.json -r fr`
 3. Compare results and iterate
 
 ### Mixed Manual/Auto Workflow
 1. Manually fix some translations in `fr.json`
-2. Mark as current: `VpnHood.ResourceTranslator -e locales/en.json -i`
-3. Add new keys to `en.json`
+2. Mark as current: `VpnHood.ResourceTranslator -b locales/en.json -i`
+3. Add new keys to base language file
 4. Run translator: only new keys get auto-translated
 
 ## Advanced Configuration
@@ -217,6 +250,12 @@ export GEMINI_API_KEY="your-api-key"
 export GEMINI_MODEL="gemini-1.5-pro"  # Override default model
 ```
 
+### Supported Models
+
+- `gemini-1.5-flash` (default) - Fast and cost-effective
+- `gemini-1.5-pro` - Higher quality, slower
+- `gemini-1.0-pro` - Legacy model
+
 ## Best Practices
 
 ### 1. Key Naming
@@ -248,14 +287,26 @@ export GEMINI_MODEL="gemini-1.5-pro"  # Override default model
 ### 4. Regular Workflow
 ```bash
 # 1. Check what changed
-VpnHood.ResourceTranslator -e locales/en.json -c
+VpnHood.ResourceTranslator -b locales/en.json -c
 
 # 2. Translate changes
-VpnHood.ResourceTranslator -e locales/en.json
+VpnHood.ResourceTranslator -b locales/en.json
 
 # 3. Review and commit
 git add locales/
 git commit -m "Update translations"
+```
+
+### 5. Multi-Source Workflows
+```bash
+# Use English as primary source
+VpnHood.ResourceTranslator -b locales/en.json
+
+# But translate French to German directly for better accuracy
+VpnHood.ResourceTranslator -b locales/fr.json -r de
+
+# Or use Spanish as source for Portuguese
+VpnHood.ResourceTranslator -b locales/es.json -r pt
 ```
 
 ## Troubleshooting
@@ -263,18 +314,18 @@ git commit -m "Update translations"
 ### Common Issues
 
 **API Key Problems**
-```
+```bash
 Error: Missing Gemini API key
 ```
 - Set `GEMINI_API_KEY` environment variable
 - Or use `-k` flag: `--api-key your-key-here`
 
 **JSON Parse Errors**
-```
+```bash
 Error: Failed to parse base JSON
 ```
-- Check `en.json` for valid JSON syntax
-- Use JSON validator: `jq . en.json`
+- Check your base file for valid JSON syntax
+- Use JSON validator: `jq . your-base-file.json`
 
 **Missing Placeholders**
 - The tool automatically appends missing `{placeholders}` to prevent runtime errors

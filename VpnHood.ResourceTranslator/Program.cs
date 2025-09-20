@@ -14,7 +14,7 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         // Simple args parsing
-        string? enPath = null;
+        string? basePath = null;
         string? extraPromptPath = null;
         string? apiKey = null;
         var model = DefaultModel;
@@ -26,9 +26,9 @@ internal static class Program
         {
             switch (args[i])
             {
-                case "-e":
-                case "--en":
-                    enPath = GetArgValue(args, ref i);
+                case "-b":
+                case "--base":
+                    basePath = GetArgValue(args, ref i);
                     break;
                 case "-x":
                 case "--extra-prompt":
@@ -61,24 +61,27 @@ internal static class Program
             }
         }
 
-        if (string.IsNullOrWhiteSpace(enPath))
+        if (string.IsNullOrWhiteSpace(basePath))
         {
-            Console.Write("Enter path to en.json: ");
-            enPath = Console.ReadLine();
+            Console.Write("Enter path to base language file (e.g., en.json, fr.json): ");
+            basePath = Console.ReadLine();
         }
 
-        if (string.IsNullOrWhiteSpace(enPath))
+        if (string.IsNullOrWhiteSpace(basePath))
         {
-            await Console.Error.WriteLineAsync("Error: en.json path is required.");
+            await Console.Error.WriteLineAsync("Error: Base language file path is required.");
             return 1;
         }
 
-        enPath = Path.GetFullPath(enPath);
-        if (!File.Exists(enPath))
+        basePath = Path.GetFullPath(basePath);
+        if (!File.Exists(basePath))
         {
-            await Console.Error.WriteLineAsync($"Error: File not found: {enPath}");
+            await Console.Error.WriteLineAsync($"Error: File not found: {basePath}");
             return 2;
         }
+
+        // Extract source language from filename (e.g., "en" from "en.json")
+        var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
 
         ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process path.");
         var prompt = Path.Combine(Environment.ProcessPath, "translation-prompt.txt");
@@ -86,20 +89,20 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(extraPromptPath))
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(extraPromptPath));
 
-        var hashPath = GetHashesFilePath(enPath);
+        var hashPath = GetHashesFilePath(basePath);
 
-        // Load base en.json
-        if (!TryLoadJsonObject(enPath, out var enObj, out var loadErr))
+        // Load base language file
+        if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr))
         {
             await Console.Error.WriteLineAsync($"Error: Failed to parse base JSON: {loadErr}");
             return 3;
         }
 
-        var orderedKeys = enObj!.Select(p => p.Key).ToList();
-        var enMap = enObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
+        var orderedKeys = baseObj!.Select(p => p.Key).ToList();
+        var baseMap = baseObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
 
         // Compute current hashes
-        var currentHashes = ComputeHashes(enMap);
+        var currentHashes = ComputeHashes(baseMap);
         var previousHashes = await LoadHashesAsync(hashPath);
 
         // Handle rebuild hashes only
@@ -110,7 +113,7 @@ internal static class Program
             return 0;
         }
 
-        var changedKeys = DetermineChangedKeys(enMap.Keys, currentHashes, previousHashes);
+        var changedKeys = DetermineChangedKeys(baseMap.Keys, currentHashes, previousHashes);
 
         if (showChanges)
         {
@@ -132,8 +135,8 @@ internal static class Program
         ITranslator translator = new GeminiTranslator(apiKey, model);
 
         // Find sibling locale files (all *.json except the base and our hash file)
-        var dir = Path.GetDirectoryName(enPath)!;
-        var baseFileName = Path.GetFileName(enPath);
+        var dir = Path.GetDirectoryName(basePath)!;
+        var baseFileName = Path.GetFileName(basePath);
         var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
             .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase)
                         && !Path.GetFileName(p).Equals(Path.GetFileName(hashPath), StringComparison.OrdinalIgnoreCase))
@@ -143,8 +146,8 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(rebuildLang))
         {
             var rebuildPath = Path.Combine(dir, $"{rebuildLang}.json");
-            await TranslateFileAsync(rebuildPath, orderedKeys, enMap, enMap.Keys.ToHashSet(), translator,
-                prompt: prompt, extraPrompt: extraPrompt, isRebuild: true);
+            await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
+                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, isRebuild: true);
         }
         else
         {
@@ -153,8 +156,8 @@ internal static class Program
 
             foreach (var localePath in files)
             {
-                await TranslateFileAsync(localePath, orderedKeys, enMap, changedKeys, translator,
-                    prompt: prompt, extraPrompt: extraPrompt, isRebuild: false);
+                await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
+                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, isRebuild: false);
             }
         }
 
@@ -167,11 +170,12 @@ internal static class Program
     private static async Task TranslateFileAsync(
         string localePath,
         List<string> orderedKeys,
-        Dictionary<string, string> enMap,
+        Dictionary<string, string> baseMap,
         HashSet<string> changedKeys,
         ITranslator translator,
         string prompt,
         string? extraPrompt,
+        string sourceLanguage,
         bool isRebuild = false)
     {
         var localeCode = Path.GetFileNameWithoutExtension(localePath);
@@ -195,22 +199,22 @@ internal static class Program
 
         foreach (var key in orderedKeys)
         {
-            var enText = enMap[key];
+            var baseText = baseMap[key];
             var translated = localeMap.TryGetValue(key, out var value) ? value : string.Empty;
             var isMissing = !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(translated);
             var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
 
             if (needsTranslation)
             {
-                if (LooksLikeUrl(enText))
+                if (LooksLikeUrl(baseText))
                 {
-                    translated = enText; // keep URLs as-is
+                    translated = baseText; // keep URLs as-is
                 }
                 else
                 {
-                    var promptOptions = BuildPromptOptions(enText, "en", localeCode, prompt: prompt, extraPrompt: extraPrompt);
+                    var promptOptions = BuildPromptOptions(baseText, sourceLanguage, localeCode, prompt: prompt, extraPrompt: extraPrompt);
                     translated = await SafeTranslateAsync(translator, promptOptions);
-                    translated = PostProcessTranslation(enText, translated);
+                    translated = PostProcessTranslation(baseText, translated);
                     translatedCount++;
 
                     if (isRebuild && translatedCount % 10 == 0)
@@ -264,8 +268,8 @@ internal static class Program
         Console.WriteLine("Resource Translator");
         Console.WriteLine("Usage: VpnHood.ResourceTranslator [options]");
         Console.WriteLine("Options:");
-        Console.WriteLine("  -e, --en <path>            Path to base en.json");
-        Console.WriteLine("  -x, extra-prompt <path>    Path to extra instructions text file for the AI prompt");
+        Console.WriteLine("  -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)");
+        Console.WriteLine("  -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt");
         Console.WriteLine("  -c, --show-changes         Show changed keys since last translation and exit");
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
@@ -274,13 +278,15 @@ internal static class Program
         Console.WriteLine("  -h, --help                 Show help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json");
-        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -r fr");
-        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -x custom-rules.txt");
+        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/en.json");
+        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/fr.json -r es");
+        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/en.json -x custom-rules.txt");
+        Console.WriteLine("  VpnHood.ResourceTranslator -b locales/de.json -c");
         Console.WriteLine();
         Console.WriteLine("Notes:");
+        Console.WriteLine("  - Any language can be used as the base source for translations");
         Console.WriteLine("  - Missing entries in target languages are always translated regardless of hash changes");
-        Console.WriteLine("  - Use --rebuild-hashes after manual translations to avoid re-translating unchanged entries");
+        Console.WriteLine("  - Use --ignore-changes after manual translations to avoid re-translating unchanged entries");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
@@ -367,10 +373,10 @@ internal static class Program
         return changed;
     }
 
-    private static string GetHashesFilePath(string enPath)
+    private static string GetHashesFilePath(string basePath)
     {
-        // Same directory, suffix .hashes.json, e.g., en.json.hashes.json
-        return Path.Combine(Path.GetDirectoryName(enPath)!, Path.GetFileName(enPath) + ".hashes.json");
+        // Same directory, suffix .hashes.json, e.g., en.json.hashes.json, fr.json.hashes.json
+        return Path.Combine(Path.GetDirectoryName(basePath)!, Path.GetFileName(basePath) + ".hashes.json");
     }
 
     private static bool LooksLikeUrl(string s)
