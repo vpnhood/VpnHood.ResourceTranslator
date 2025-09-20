@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -71,19 +70,11 @@ internal static class Program
             return 2;
         }
 
+        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process path.");
+        var prompt = Path.Combine(Environment.ProcessPath, "translation-prompt.txt");
         string? extraPrompt = null;
         if (!string.IsNullOrWhiteSpace(extraPromptPath))
-        {
-            var extraPromptFullPath = Path.GetFullPath(extraPromptPath);
-            if (!File.Exists(extraPromptFullPath))
-            {
-                await Console.Error.WriteLineAsync($"Warning: Extra prompt file not found: {extraPromptFullPath}");
-            }
-            else
-            {
-                extraPrompt = await File.ReadAllTextAsync(extraPromptFullPath);
-            }
-        }
+            extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(extraPromptPath));
 
         var hashPath = GetHashesFilePath(enPath);
 
@@ -94,7 +85,7 @@ internal static class Program
             return 3;
         }
 
-        var orderedKeys = enObj!.Select(p => p.Key).ToList();
+        var orderedKeys = enObj.Select(p => p.Key).ToList();
         var enMap = enObj.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
 
         // Compute current hashes
@@ -137,7 +128,8 @@ internal static class Program
 
         foreach (var localePath in files)
         {
-            await TranslateFileAsync(localePath, orderedKeys, enMap, changedKeys, translator, extraPrompt);
+            await TranslateFileAsync(localePath, orderedKeys, enMap, changedKeys, translator,
+                prompt: prompt, extraPrompt: extraPrompt);
         }
 
         // Save updated hashes (only after attempting translations)
@@ -152,14 +144,13 @@ internal static class Program
         Dictionary<string, string> enMap,
         HashSet<string> changedKeys,
         ITranslator translator,
+        string prompt,
         string? extraPrompt)
     {
         var localeCode = Path.GetFileNameWithoutExtension(localePath);
 
         if (!TryLoadJsonObject(localePath, out var localeObj, out _))
-        {
             localeObj = new JsonObject();
-        }
 
         var localeMap = new Dictionary<string, string>();
         foreach (var kv in localeObj!)
@@ -182,7 +173,7 @@ internal static class Program
                 }
                 else
                 {
-                    var promptOptions = BuildPromptOptions(enText, "en", localeCode, extraPrompt);
+                    var promptOptions = BuildPromptOptions(enText, "en", localeCode, prompt: prompt, extraPrompt: extraPrompt);
                     translated = await SafeTranslateAsync(translator, promptOptions);
                     translated = PostProcessTranslation(enText, translated);
                     translatedCount++;
@@ -197,17 +188,16 @@ internal static class Program
         Console.WriteLine($"{Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
     }
 
-    private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang, string? extraPrompt)
+    private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang,
+        string prompt, string? extraPrompt)
     {
-        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process path.");
-        var promptFilePath = Path.Combine(Environment.ProcessPath, "translation-prompt.txt");
-        var prompt = new StringBuilder(File.ReadAllText(promptFilePath));
-        
+        var promptBuilder = new StringBuilder(prompt);
+
         if (!string.IsNullOrWhiteSpace(extraPrompt))
         {
-            prompt.AppendLine();
-            prompt.AppendLine("Additional guidelines:");
-            prompt.AppendLine(extraPrompt);
+            promptBuilder.AppendLine();
+            promptBuilder.AppendLine("Additional guidelines:");
+            promptBuilder.AppendLine(extraPrompt);
         }
 
         return new PromptOptions
@@ -215,7 +205,7 @@ internal static class Program
             SourceLanguage = sourceLang,
             TargetLanguage = targetLang,
             Text = text,
-            Prompt = prompt.ToString()
+            Prompt = promptBuilder.ToString()
         };
     }
 
@@ -244,8 +234,7 @@ internal static class Program
         {
             var text = File.ReadAllText(path);
             var doc = JsonNode.Parse(text) as JsonObject;
-            if (doc == null) throw new Exception("Root is not a JSON object.");
-            obj = doc;
+            obj = doc ?? throw new Exception("Root is not a JSON object.");
             error = null;
             return true;
         }
