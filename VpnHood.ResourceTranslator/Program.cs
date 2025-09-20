@@ -19,6 +19,7 @@ internal static class Program
         string? apiKey = null;
         var model = DefaultModel;
         var showChanges = false;
+        string? rebuildLang = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -43,6 +44,10 @@ internal static class Program
                 case "-c":
                 case "--show-changes":
                     showChanges = true;
+                    break;
+                case "-r":
+                case "--rebuild-lang":
+                    rebuildLang = GetArgValue(args, ref i);
                     break;
                 case "-h":
                 case "--help":
@@ -121,13 +126,23 @@ internal static class Program
                         && !Path.GetFileName(p).Equals(Path.GetFileName(hashPath), StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (files.Count == 0)
-            Console.WriteLine("No sibling locale files found to translate.");
-
-        foreach (var localePath in files)
+        // Handle rebuild specific language
+        if (!string.IsNullOrWhiteSpace(rebuildLang))
         {
-            await TranslateFileAsync(localePath, orderedKeys, enMap, changedKeys, translator,
-                prompt: prompt, extraPrompt: extraPrompt);
+            var rebuildPath = Path.Combine(dir, $"{rebuildLang}.json");
+            await TranslateFileAsync(rebuildPath, orderedKeys, enMap, enMap.Keys.ToHashSet(), translator,
+                prompt: prompt, extraPrompt: extraPrompt, isRebuild: true);
+        }
+        else
+        {
+            if (files.Count == 0)
+                Console.WriteLine("No sibling locale files found to translate.");
+
+            foreach (var localePath in files)
+            {
+                await TranslateFileAsync(localePath, orderedKeys, enMap, changedKeys, translator,
+                    prompt: prompt, extraPrompt: extraPrompt, isRebuild: false);
+            }
         }
 
         // Save updated hashes (only after attempting translations)
@@ -143,7 +158,8 @@ internal static class Program
         HashSet<string> changedKeys,
         ITranslator translator,
         string prompt,
-        string? extraPrompt)
+        string? extraPrompt,
+        bool isRebuild = false)
     {
         var localeCode = Path.GetFileNameWithoutExtension(localePath);
 
@@ -156,12 +172,16 @@ internal static class Program
 
         var output = new JsonObject();
         var translatedCount = 0;
+        var totalKeys = orderedKeys.Count;
+
+        if (isRebuild)
+            Console.WriteLine($"Rebuilding {Path.GetFileName(localePath)} ({localeCode}) - translating all {totalKeys} keys...");
 
         foreach (var key in orderedKeys)
         {
             var enText = enMap[key];
             var translated = localeMap.TryGetValue(key, out var value) ? value : string.Empty;
-            var needsTranslation = changedKeys.Contains(key) || !localeMap.ContainsKey(key);
+            var needsTranslation = isRebuild || changedKeys.Contains(key) || !localeMap.ContainsKey(key);
 
             if (needsTranslation)
             {
@@ -175,6 +195,9 @@ internal static class Program
                     translated = await SafeTranslateAsync(translator, promptOptions);
                     translated = PostProcessTranslation(enText, translated);
                     translatedCount++;
+
+                    if (isRebuild && translatedCount % 10 == 0)
+                        Console.WriteLine($"  Progress: {translatedCount}/{totalKeys} ({(translatedCount * 100 / totalKeys):F0}%)");
                 }
             }
 
@@ -183,7 +206,11 @@ internal static class Program
 
         // Write JSON preserving base order
         await WriteJsonAsync(localePath, output);
-        Console.WriteLine($"{Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
+        
+        if (isRebuild)
+            Console.WriteLine($"✓ {Path.GetFileName(localePath)}: Rebuilt with {translatedCount} translations.");
+        else
+            Console.WriteLine($"{Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
     }
 
     private static PromptOptions BuildPromptOptions(string text, string sourceLang, string targetLang,
@@ -221,9 +248,15 @@ internal static class Program
         Console.WriteLine("  -e, --en <path>            Path to base en.json");
         Console.WriteLine("  -x, --exceptions <path>    Path to extra instructions text file for the AI prompt");
         Console.WriteLine("  -c, --show-changes         Show changed keys since last translation and exit");
+        Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)");
         Console.WriteLine("  -m, --model <name>         Gemini model (default: gemini-1.5-flash)");
         Console.WriteLine("  -h, --help                 Show help");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json");
+        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -r fr");
+        Console.WriteLine("  VpnHood.ResourceTranslator -e locales/en.json -x custom-rules.txt");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
