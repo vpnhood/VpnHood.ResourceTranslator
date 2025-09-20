@@ -94,8 +94,10 @@ internal static class Program
         // Extract source language from filename (e.g., "en" from "en.json")
         var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
 
-        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process path.");
-        var prompt = Path.Combine(Environment.ProcessPath, "translation-prompt.txt");
+        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process file.");
+        var promptFile = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "translation-prompt.txt");
+        var prompt = await File.ReadAllTextAsync(promptFile);
+
         string? extraPrompt = null;
         if (!string.IsNullOrWhiteSpace(extraPromptPath))
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(extraPromptPath));
