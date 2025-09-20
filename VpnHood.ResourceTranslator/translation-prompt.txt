@@ -1,5 +1,4 @@
-You are an expert app localization system.
-Task: Translate the given string from the source language to the target language.
+Translate fluently and natural.
 Rules:
 - Preserve placeholders exactly as-is: tokens in curly braces like {x}, {name}, {minutes}.
 - Preserve HTML tags, entities, and attributes exactly (do not translate tags or attribute names).

@@ -16,6 +16,7 @@ internal sealed class GeminiTranslator(
     {
         var prompt = BuildPrompt(promptOptions);
 
+        //prompt = "translate to persian fluently and natural: \r\n Use secure, customizable DNS to enhance privacy and performance.\r\n";
         var geminiModel = _googleAi.GenerativeModel(model: model);
         var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
         {
