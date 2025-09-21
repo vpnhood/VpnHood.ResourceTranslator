@@ -1,4 +1,4 @@
-Translate fluently and very natural depends on the target culture.
+Translate to target language then simplify and improve for marketing.
 
 Rules:
 - Preserve placeholders exactly as-is: tokens in curly braces like {x}, {name}, {minutes}.
@@ -7,5 +7,4 @@ Rules:
 - Keep URLs and domains unchanged.
 - Return ONLY the translated string without quotes or extra commentary.
 - If the text is already a URL or looks untranslatable, return it unchanged.
-- If you determine that a specific key should not be translated for the target language, return "*" to skip translation.
-- Return * to skip translation for specific key-language combinations or if the key indicated to be ignored.
+- Return * to skip translation for an item
