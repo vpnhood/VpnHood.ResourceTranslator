@@ -1,10 +1,10 @@
 ﻿# VpnHood Resource Translator
 
-An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI ChatGPT, Meta AI, or Grok AI) to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
+An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI ChatGPT, or Grok AI) to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
 
 ## Features
 
-- 🤖 **Multi-Engine AI Translation** - Supports Google Gemini, OpenAI ChatGPT, Meta AI, and Grok AI with smart engine detection
+- 🤖 **Multi-Engine AI Translation** - Supports Google Gemini, OpenAI ChatGPT, and Grok AI with smart engine detection
 - 🔄 **Incremental Updates** - Only translates changed entries using hash-based tracking
 - 🎯 **Smart Placeholder Preservation** - Keeps `{variables}`, HTML tags, and URLs intact
 - 📁 **Batch Processing** - Translates multiple language files simultaneously
@@ -21,7 +21,6 @@ An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI Chat
 - API key for your preferred service:
   - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
   - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
-  - Meta AI API key ([Get one here](https://developers.meta.com/))
   - Grok AI API key ([Get one here](https://console.x.ai/))
 
 ### Build from Source
@@ -41,16 +40,12 @@ dotnet build --configuration Release
    # For OpenAI ChatGPT
    export OPENAI_API_KEY="your-openai-api-key-here"
    
-   # For Meta AI
-   export META_API_KEY="your-meta-api-key-here"
-   
    # For Grok AI
    export GROK_API_KEY="your-grok-api-key-here"
    
    # On Windows:
    set GEMINI_API_KEY=your-gemini-api-key-here
    set OPENAI_API_KEY=your-openai-api-key-here
-   set META_API_KEY=your-meta-api-key-here
    set GROK_API_KEY=your-grok-api-key-here
    ```
 
@@ -64,11 +59,8 @@ dotnet build --configuration Release
    # ChatGPT
    vhtranslator -b locales/en.json -m gpt-4o-mini
    
-   # Meta AI
-   vhtranslator -b locales/en.json -m llama-3.1-70b-instruct
-   
    # Grok AI
-   vhtranslator -b locales/en.json -m grok-4-latest
+   vhtranslator -b locales/en.json -m grok-beta
    ```
 
 ## Engine and Model Selection
@@ -78,7 +70,6 @@ The translator features **intelligent engine detection**:
 - **Auto-detection**: If no engine is specified, it's automatically detected from the model name
 - **Gemini models**: Any model containing "gemini" uses the Gemini engine
 - **ChatGPT models**: Models like gpt-4, gpt-3.5-turbo, etc. use the ChatGPT engine
-- **Meta AI models**: Models containing "llama" or "meta" use the Meta AI engine
 - **Grok AI models**: Models containing "grok" use the Grok AI engine
 - **Manual override**: Use `-e` to explicitly specify the engine
 
@@ -90,14 +81,11 @@ vhtranslator -b locales/en.json -m gemini-2.5-flash
 # Auto-detects ChatGPT engine  
 vhtranslator -b locales/en.json -m gpt-4o-mini
 
-# Auto-detects Meta AI engine
-vhtranslator -b locales/en.json -m llama-3.1-70b-instruct
-
 # Auto-detects Grok AI engine
-vhtranslator -b locales/en.json -m grok-4-latest
+vhtranslator -b locales/en.json -m grok-beta
 
 # Explicitly specify engine
-vhtranslator -b locales/en.json -e meta -m llama-3.1-8b-instruct
+vhtranslator -b locales/en.json -e grok -m grok-beta
 
 # Default behavior (Gemini)
 vhtranslator -b locales/en.json
@@ -116,9 +104,9 @@ Options:
   -c, --show-changes         Show changed keys since last translation and exit
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
   -i, --ignore-changes       Rebuild hash file to mark all entries as current
-  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/META_API_KEY/GROK_API_KEY env var)
+  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)
   -m, --model <name>         AI model (default: gemini-2.5-flash-lite)
-  -e, --engine <name>        Translation engine: gemini, gpt, meta, or grok (default: auto-detected)
+  -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected)
   -n, --batch <number>       Batch size for translation requests (default: 20)
   -h, --help                 Show help
 ```
@@ -133,29 +121,26 @@ vhtranslator -b locales/en.json
 # Use ChatGPT with auto-detection
 vhtranslator -b locales/en.json -m gpt-4o-mini
 
-# Use Meta AI with auto-detection
-vhtranslator -b locales/en.json -m llama-3.1-70b-instruct
-
 # Use Grok AI with auto-detection
-vhtranslator -b locales/en.json -m grok-4-latest
+vhtranslator -b locales/en.json -m grok-beta
 
 # Use specific Gemini model
 vhtranslator -b locales/en.json -m gemini-2.5-pro
 
 # Explicitly specify engine
-vhtranslator -b locales/en.json -e meta -m llama-3.1-8b-instruct
+vhtranslator -b locales/en.json -e grok -m grok-beta
 ```
 
 #### Advanced Usage
 ```bash
-# Use French as source language with Meta AI
-vhtranslator -b locales/fr.json -m llama-3.1-70b-instruct
+# Use French as source language with Grok AI
+vhtranslator -b locales/fr.json -m grok-beta
 
 # Force rebuild Spanish with Grok AI
-vhtranslator -b locales/en.json -r es -e grok -m grok-4-latest
+vhtranslator -b locales/en.json -r es -e grok -m grok-beta
 
-# Use custom instructions with Meta AI
-vhtranslator -b locales/en.json -x custom-prompt.txt -m llama-3.1-70b-instruct
+# Use custom instructions with ChatGPT
+vhtranslator -b locales/en.json -x custom-prompt.txt -m gpt-4
 
 # Show what changed since last translation
 vhtranslator -b locales/en.json -c
@@ -235,7 +220,6 @@ Translation Guidelines:
 - Use gender-neutral language where possible
 ```
 
-
 ## Workflow Examples
 
 ### Daily Development Workflow
@@ -312,7 +296,6 @@ Key-Specific Rules:
 # Required (choose one based on your preferred engine)
 export GEMINI_API_KEY="your-gemini-api-key"
 export OPENAI_API_KEY="your-openai-api-key" 
-export META_API_KEY="your-meta-api-key"
 export GROK_API_KEY="your-grok-api-key"
 
 # Optional
@@ -379,10 +362,9 @@ vhtranslator -b locales/es.json -r pt
 **API Key Problems**
 ```bash
 Error: Missing Gemini API key
-Error: Missing Meta API key  
 Error: Missing Grok API key
 ```
-- Set appropriate environment variable: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `META_API_KEY`, or `GROK_API_KEY`
+- Set appropriate environment variable: `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `GROK_API_KEY`
 - Or use `-k` flag: `--api-key your-key-here`
 
 **JSON Parse Errors**
@@ -400,11 +382,9 @@ Error: Failed to parse base JSON
 If you hit API rate limits:
 - **Gemini**: Use `gemini-2.5-flash-lite` model (faster, cheaper)
 - **ChatGPT**: Use `gpt-3.5-turbo` for faster, cheaper requests
-- **Meta AI**: Use smaller models like `llama-3.1-8b-instruct`
 - **Grok**: Monitor usage and implement delays if needed
 - Add delays between requests (built-in retry logic)
 
 **Engine-Specific Notes**
-- **Meta AI**: Ensure you have access to the Meta AI API and sufficient credits
 - **Grok AI**: Check that your X.AI account has API access enabled
-- **API Endpoints**: The tool uses standard OpenAI-compatible endpoints for Meta AI and Grok AI
+- **API Endpoints**: The tool uses standard OpenAI-compatible endpoints for supported engines
