@@ -7,4 +7,5 @@ Rules:
 - Keep URLs and domains unchanged.
 - Return ONLY the translated string without quotes or extra commentary.
 - If the text is already a URL or looks untranslatable, return it unchanged.
+- This is an i18n resource, make sure the translation format respects the rules
 - Return * to skip translation for an item
