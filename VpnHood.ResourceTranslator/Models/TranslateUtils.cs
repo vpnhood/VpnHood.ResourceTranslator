@@ -10,6 +10,16 @@ namespace VpnHood.ResourceTranslator.Models;
 
 public static class TranslateUtils
 {
+    public static string BuildSystemPrompt()
+    {
+        return 
+            "You are a professional localization engine. " +
+            "Return ONLY a valid JSON array of translation objects. " +
+            "Do not wrap the array in any additional objects or properties. " +
+            "Do not include any commentary, explanations, or markdown formatting. " +
+            "The response must start with '[' and end with ']'.";
+    }
+
     public static string BuildPrompt(PromptOptions options)
     {
         var sb = new StringBuilder();

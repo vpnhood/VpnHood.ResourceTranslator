@@ -19,12 +19,7 @@ internal sealed class ChatGptTranslator(
 
         var messages = new List<ChatMessage>
         {
-            ChatMessage.CreateSystemMessage(
-                "You are a professional localization engine. " +
-                "Return ONLY a valid JSON array of translation objects. " +
-                "Do not wrap the array in any additional objects or properties. " +
-                "Do not include any commentary, explanations, or markdown formatting. " +
-                "The response must start with '[' and end with ']'."),
+            ChatMessage.CreateSystemMessage(TranslateUtils.BuildSystemPrompt()),
             ChatMessage.CreateUserMessage(prompt),
         };
 

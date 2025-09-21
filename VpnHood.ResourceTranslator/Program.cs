@@ -120,7 +120,9 @@ internal static class Program
         {
             "gpt" or "chatgpt" => new ChatGptTranslator(apiKey, model),
             "gemini" => new GeminiTranslator(apiKey, model),
-            _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt")
+            "meta" or "meta-ai" => new MetaAiTranslator(apiKey, model),
+            "grok" or "grok-ai" or "x-ai" => new GrokAiTranslator(apiKey, model),
+            _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt, meta, grok")
         };
 
         // Find sibling locale files (all *.json except the base)

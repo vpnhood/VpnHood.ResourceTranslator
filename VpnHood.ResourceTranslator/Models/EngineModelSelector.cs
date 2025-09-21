@@ -28,6 +28,12 @@ internal static class EngineModelSelector
         
         if (modelLower.Contains("gemini"))
             return "gemini";
+        
+        if (modelLower.Contains("llama") || modelLower.Contains("meta"))
+            return "meta";
+        
+        if (modelLower.Contains("grok"))
+            return "grok";
             
         // Default to chatgpt for all other models
         return "gpt";
@@ -39,6 +45,12 @@ internal static class EngineModelSelector
         {
             "chatgpt" => "gpt",
             "openai" => "gpt",
+            "meta-ai" => "meta",
+            "metaai" => "meta",
+            "grok-ai" => "grok",
+            "grokai" => "grok",
+            "x-ai" => "grok",
+            "xai" => "grok",
             _ => engine.ToLowerInvariant()
         };
     }
@@ -49,6 +61,8 @@ internal static class EngineModelSelector
         {
             "gpt" or "chatgpt" => "OPENAI_API_KEY",
             "gemini" => "GEMINI_API_KEY",
+            "meta" or "meta-ai" => "META_API_KEY",
+            "grok" or "grok-ai" or "x-ai" => "GROK_API_KEY",
             _ => "GEMINI_API_KEY" // fallback to Gemini
         };
     }
