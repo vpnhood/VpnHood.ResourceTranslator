@@ -25,6 +25,8 @@ internal sealed class GeminiTranslator(
         if (response.Text == null)
             throw new Exception("AI result is null");
 
-        return AiResponseParser.ParseResponse(response.Text);
+        return JsonSerializer.Deserialize<TranslateResult[]>(response.Text)
+               ?? throw new Exception("AI result deserialization failed");
+
     }
 }

@@ -30,7 +30,7 @@ internal sealed class ChatGptTranslator(
 
         var options = new ChatCompletionOptions
         {
-            //ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+            //ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() // doesn't work as expected
         };
 
         var response = await chatClient.CompleteChatAsync(messages, options, cancellationToken);
@@ -42,6 +42,7 @@ internal sealed class ChatGptTranslator(
         if (string.IsNullOrWhiteSpace(content))
             throw new Exception("AI result content is null or empty");
 
-        return AiResponseParser.ParseResponse(content);
+        return JsonSerializer.Deserialize<TranslateResult[]>(content)
+               ?? throw new Exception("AI result deserialization failed");
     }
 }
