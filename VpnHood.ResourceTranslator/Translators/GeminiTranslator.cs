@@ -16,7 +16,6 @@ internal sealed class GeminiTranslator(
     {
         var prompt = TranslateUtils.BuildPrompt(promptOptions);
 
-        //prompt = "translate to persian fluently and natural: \r\n Use secure, customizable DNS to enhance privacy and performance.\r\n";
         var geminiModel = _googleAi.GenerativeModel(model: model);
         var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
         {
@@ -26,7 +25,6 @@ internal sealed class GeminiTranslator(
         if (response.Text == null)
             throw new Exception("AI result is null");
 
-        return JsonSerializer.Deserialize<TranslateResult[]>(response.Text)
-            ?? throw new Exception("AI result deserialization failed");
+        return AiResponseParser.ParseResponse(response.Text);
     }
 }
