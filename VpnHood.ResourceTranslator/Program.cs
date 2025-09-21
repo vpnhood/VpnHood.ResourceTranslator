@@ -10,6 +10,7 @@ namespace VpnHood.ResourceTranslator;
 internal static class Program
 {
     private const string DefaultModel = "gemini-2.5-flash-lite"; // Can be overridden via --model
+    private const string DefaultEngine = "gemini"; // Can be overridden via --engine
     private const int DefaultBatchSize = 20;
     private const int DefaultTranslateTimeoutSeconds = 60;
 
@@ -20,6 +21,7 @@ internal static class Program
         string? extraPromptPath = null;
         string? apiKey = null;
         var model = DefaultModel;
+        var engine = DefaultEngine;
         var showChanges = false;
         string? rebuildLang = null;
         var rebuildHashes = false;
@@ -44,6 +46,10 @@ internal static class Program
                 case "-m":
                 case "--model":
                     model = GetArgValue(args, ref i);
+                    break;
+                case "-e":
+                case "--engine":
+                    engine = GetArgValue(args, ref i);
                     break;
                 case "-c":
                 case "--show-changes":
@@ -140,14 +146,35 @@ internal static class Program
             return 0;
         }
 
-        apiKey ??= Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+        // Get API key based on engine type
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            await Console.Error.WriteLineAsync("Error: Missing Gemini API key. Provide via --api-key or GEMINI_API_KEY env var.");
+            apiKey = engine.ToLowerInvariant() switch
+            {
+                "gpt" or "chatgpt" => Environment.GetEnvironmentVariable("OPENAI_API_KEY"),
+                "gemini" => Environment.GetEnvironmentVariable("GEMINI_API_KEY"),
+                _ => Environment.GetEnvironmentVariable("GEMINI_API_KEY") // fallback to Gemini
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            var envVarName = engine.ToLowerInvariant() switch
+            {
+                "gpt" or "chatgpt" => "OPENAI_API_KEY",
+                _ => "GEMINI_API_KEY"
+            };
+            await Console.Error.WriteLineAsync($"Error: Missing API key. Provide via --api-key or {envVarName} env var.");
             return 4;
         }
 
-        ITranslator translator = new GeminiTranslator(apiKey, model);
+        // Create translator based on engine
+        ITranslator translator = engine.ToLowerInvariant() switch
+        {
+            "gpt" or "chatgpt" => new ChatGptTranslator(apiKey, model),
+            "gemini" => new GeminiTranslator(apiKey, model),
+            _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt")
+        };
 
         // Find sibling locale files (all *.json except the base)
         var dir = Path.GetDirectoryName(basePath)!;
@@ -328,16 +355,23 @@ internal static class Program
         Console.WriteLine("  -c, --show-changes         Show changed keys since last translation and exit");
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
-        Console.WriteLine("  -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)");
-        Console.WriteLine("  -m, --model <name>         Gemini model (default: gemini-2.5-flash-lite)");
+        Console.WriteLine("  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY env var)");
+        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-2.5-flash-lite)");
+        Console.WriteLine("  -e, --engine <name>        Translation engine: gemini or gpt (default: gemini)");
         Console.WriteLine("  -n, --batch <number>       Batch size for translation requests (default: 20)");
         Console.WriteLine("  -h, --help                 Show help");
         Console.WriteLine();
         Console.WriteLine("Examples:");
         Console.WriteLine("  vhtranslator -b locales/en.json");
-        Console.WriteLine("  vhtranslator -b locales/fr.json -r es");
-        Console.WriteLine("  vhtranslator -b locales/en.json -x custom-prompt.txt");
+        Console.WriteLine("  vhtranslator -b locales/en.json -e gpt -m gpt-4o-mini");
+        Console.WriteLine("  vhtranslator -b locales/fr.json -r es -e gemini");
+        Console.WriteLine("  vhtranslator -b locales/en.json -x custom-prompt.txt -e chatgpt");
         Console.WriteLine("  vhtranslator -b locales/de.json -c");
+        Console.WriteLine();
+        Console.WriteLine("Engines:");
+        Console.WriteLine("  gemini    - Google Gemini (requires GEMINI_API_KEY)");
+        Console.WriteLine("  gpt       - OpenAI ChatGPT (requires OPENAI_API_KEY)");
+        Console.WriteLine("  chatgpt   - Alias for gpt");
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - Any language can be used as the base source for translations");
