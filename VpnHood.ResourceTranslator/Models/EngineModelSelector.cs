@@ -19,7 +19,25 @@ public static class EngineModelSelector
         // Normalize engine names
         engine = NormalizeEngine(engine);
 
+        // Use engine-specific default models when no model is specified
+        if (string.IsNullOrWhiteSpace(requestedModel))
+        {
+            model = GetDefaultModelForEngine(engine);
+        }
+
         return (engine, model);
+    }
+
+    private static string GetDefaultModelForEngine(string engine)
+    {
+        return engine.ToLowerInvariant() switch
+        {
+            "grok" => "grok-4-latest",
+            "gpt" => "gpt-4o-mini",
+            "gemini" => "gemini-2.5-flash-lite",
+            "meta" => "llama-3.1-70b-instruct",
+            _ => DefaultModel
+        };
     }
 
     private static string DetectEngineFromModel(string model)

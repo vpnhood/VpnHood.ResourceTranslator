@@ -88,7 +88,7 @@ internal class ArgumentParser
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
         Console.WriteLine("  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)");
-        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-2.5-flash-lite)");
+        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-2.5-flash-lite, grok-4-latest for grok engine)");
         Console.WriteLine("  -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected from model)");
         Console.WriteLine("  -n, --batch <number>       Batch size for translation requests (default: 20)");
         Console.WriteLine("  -h, --help                 Show help");
@@ -96,7 +96,7 @@ internal class ArgumentParser
         Console.WriteLine("Examples:");
         Console.WriteLine("  vhtranslator -b locales/en.json");
         Console.WriteLine("  vhtranslator -b locales/en.json -m gpt-4o-mini");
-        Console.WriteLine("  vhtranslator -b locales/en.json -m grok-beta");
+        Console.WriteLine("  vhtranslator -b locales/en.json -m grok-4-latest");
         Console.WriteLine("  vhtranslator -b locales/fr.json -r es -e gemini");
         Console.WriteLine("  vhtranslator -b locales/en.json -x custom-prompt.txt -e gpt -m gpt-4");
         Console.WriteLine("  vhtranslator -b locales/de.json -c");

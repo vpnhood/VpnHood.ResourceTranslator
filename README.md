@@ -60,7 +60,7 @@ dotnet build --configuration Release
    vhtranslator -b locales/en.json -m gpt-4o-mini
    
    # Grok AI
-   vhtranslator -b locales/en.json -m grok-beta
+   vhtranslator -b locales/en.json -m grok-4-latest
    ```
 
 ## Engine and Model Selection
@@ -82,10 +82,10 @@ vhtranslator -b locales/en.json -m gemini-2.5-flash
 vhtranslator -b locales/en.json -m gpt-4o-mini
 
 # Auto-detects Grok AI engine
-vhtranslator -b locales/en.json -m grok-beta
+vhtranslator -b locales/en.json -m grok-4-latest
 
 # Explicitly specify engine
-vhtranslator -b locales/en.json -e grok -m grok-beta
+vhtranslator -b locales/en.json -e grok -m grok-4-latest
 
 # Default behavior (Gemini)
 vhtranslator -b locales/en.json
@@ -122,22 +122,22 @@ vhtranslator -b locales/en.json
 vhtranslator -b locales/en.json -m gpt-4o-mini
 
 # Use Grok AI with auto-detection
-vhtranslator -b locales/en.json -m grok-beta
+vhtranslator -b locales/en.json -m grok-4-latest
 
 # Use specific Gemini model
 vhtranslator -b locales/en.json -m gemini-2.5-pro
 
 # Explicitly specify engine
-vhtranslator -b locales/en.json -e grok -m grok-beta
+vhtranslator -b locales/en.json -e grok -m grok-4-latest
 ```
 
 #### Advanced Usage
 ```bash
 # Use French as source language with Grok AI
-vhtranslator -b locales/fr.json -m grok-beta
+vhtranslator -b locales/fr.json -m grok-4-latest
 
 # Force rebuild Spanish with Grok AI
-vhtranslator -b locales/en.json -r es -e grok -m grok-beta
+vhtranslator -b locales/en.json -r es -e grok -m grok-4-latest
 
 # Use custom instructions with ChatGPT
 vhtranslator -b locales/en.json -x custom-prompt.txt -m gpt-4

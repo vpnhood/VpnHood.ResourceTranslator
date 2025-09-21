@@ -9,5 +9,6 @@ Guidance for future changes:
 - Allowed public engines: `gemini`, `gpt`, `grok`.
 - Environment variable docs should include only: `GEMINI_API_KEY`, `OPENAI_API_KEY`, `GROK_API_KEY`.
 - Samples should not include llama/meta models.
+- use grok-4-latest as default model for grok engine
 
 If you need to change this policy, the maintainer will update this file.

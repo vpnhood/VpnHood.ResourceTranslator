@@ -42,11 +42,11 @@ public sealed class EngineModelSelectorTests
     public void SelectEngineAndModel_AutoDetectsGrok()
     {
         // Arrange & Act
-        var (engine, model) = EngineModelSelector.SelectEngineAndModel(null, "grok-beta");
+        var (engine, model) = EngineModelSelector.SelectEngineAndModel(null, "grok-4-latest");
 
         // Assert
         Assert.AreEqual("grok", engine);
-        Assert.AreEqual("grok-beta", model);
+        Assert.AreEqual("grok-4-latest", model);
     }
 
     [TestMethod]
@@ -58,6 +58,25 @@ public sealed class EngineModelSelectorTests
         // Assert
         Assert.AreEqual("meta", engine);
         Assert.AreEqual("gpt-4", model);
+    }
+
+    [TestMethod]
+    public void SelectEngineAndModel_UsesEngineSpecificDefaultModels()
+    {
+        // Test Grok engine default
+        var (grokEngine, grokModel) = EngineModelSelector.SelectEngineAndModel("grok", null);
+        Assert.AreEqual("grok", grokEngine);
+        Assert.AreEqual("grok-4-latest", grokModel);
+
+        // Test GPT engine default
+        var (gptEngine, gptModel) = EngineModelSelector.SelectEngineAndModel("gpt", null);
+        Assert.AreEqual("gpt", gptEngine);
+        Assert.AreEqual("gpt-4o-mini", gptModel);
+
+        // Test Gemini engine default
+        var (geminiEngine, geminiModel) = EngineModelSelector.SelectEngineAndModel("gemini", null);
+        Assert.AreEqual("gemini", geminiEngine);
+        Assert.AreEqual("gemini-2.5-flash-lite", geminiModel);
     }
 
     [TestMethod]
