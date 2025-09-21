@@ -19,18 +19,20 @@ internal sealed class ChatGptTranslator(
 
         var messages = new List<ChatMessage>
         {
-            //ChatMessage.CreateSystemMessage("You are a professional localization engine. Return ONLY a valid JSON array matching the requested schema. No extra commentary."),
-            ChatMessage.CreateUserMessage(prompt)
+            ChatMessage.CreateSystemMessage(
+                "You are a professional localization engine. " +
+                "Return must be a JSON array even for single object matching the requested schema. No extra commentary. " +
+                "the response should not start with single json object. it must be array"),
+            ChatMessage.CreateUserMessage(prompt),
         };
 
         var options = new ChatCompletionOptions
         {
-            Temperature = 0.2f,
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
 
         var response = await chatClient.CompleteChatAsync(messages, options, cancellationToken);
-        
+
         if (response?.Value?.Content == null || response.Value.Content.Count == 0)
             throw new Exception("AI result is null or empty");
 
@@ -38,7 +40,18 @@ internal sealed class ChatGptTranslator(
         if (string.IsNullOrWhiteSpace(content))
             throw new Exception("AI result content is null or empty");
 
-        return JsonSerializer.Deserialize<TranslateResult[]>(content)
-               ?? throw new Exception("AI result deserialization failed");
+        if (content.TrimStart()[0] == '{')
+        {
+            var result = JsonSerializer.Deserialize<TranslateResult>(content) 
+                         ?? throw new Exception("AI result deserialization failed");
+            return new[] { result };
+
+        }
+        else
+        {
+            var result = JsonSerializer.Deserialize<TranslateResult[]>(content)
+                   ?? throw new Exception("AI result deserialization failed");
+            return result;
+        }
     }
 }

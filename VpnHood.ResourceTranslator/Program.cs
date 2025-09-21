@@ -9,75 +9,25 @@ namespace VpnHood.ResourceTranslator;
 
 internal static class Program
 {
-    private const string DefaultModel = "gemini-2.5-flash-lite"; // Can be overridden via --model
-    private const string DefaultEngine = "gemini"; // Can be overridden via --engine
-    private const int DefaultBatchSize = 20;
-    private const int DefaultTranslateTimeoutSeconds = 60;
+    private const int DefaultTranslateTimeoutSeconds = 90;
 
     private static async Task<int> Main(string[] args)
     {
-        // Simple args parsing
-        string? basePath = null;
-        string? extraPromptPath = null;
-        string? apiKey = null;
-        var model = DefaultModel;
-        var engine = DefaultEngine;
-        var showChanges = false;
-        string? rebuildLang = null;
-        var rebuildHashes = false;
-        var batchSize = DefaultBatchSize;
-
-        for (var i = 0; i < args.Length; i++)
+        var argumentParser = new ArgumentParser();
+        
+        if (!argumentParser.Parse(args))
         {
-            switch (args[i])
-            {
-                case "-b":
-                case "--base":
-                    basePath = GetArgValue(args, ref i);
-                    break;
-                case "-x":
-                case "--extra-prompt":
-                    extraPromptPath = GetArgValue(args, ref i);
-                    break;
-                case "-k":
-                case "--api-key":
-                    apiKey = GetArgValue(args, ref i);
-                    break;
-                case "-m":
-                case "--model":
-                    model = GetArgValue(args, ref i);
-                    break;
-                case "-e":
-                case "--engine":
-                    engine = GetArgValue(args, ref i);
-                    break;
-                case "-c":
-                case "--show-changes":
-                    showChanges = true;
-                    break;
-                case "-r":
-                case "--rebuild-lang":
-                    rebuildLang = GetArgValue(args, ref i);
-                    break;
-                case "-i":
-                case "--ignore-changes":
-                    rebuildHashes = true;
-                    break;
-                case "-n":
-                case "--batch":
-                {
-                    var val = GetArgValue(args, ref i);
-                    if (int.TryParse(val, out var n) && n > 0)
-                        batchSize = n;
-                    break;
-                }
-                case "-h":
-                case "--help":
-                    PrintHelp();
-                    return 0;
-            }
+            return 1;
         }
 
+        if (argumentParser.ShowHelp)
+        {
+            ArgumentParser.PrintHelp();
+            return 0;
+        }
+
+        // Get base path
+        var basePath = argumentParser.BasePath;
         if (string.IsNullOrWhiteSpace(basePath))
         {
             Console.Write("Enter path to base language file (e.g., en.json, fr.json): ");
@@ -97,16 +47,20 @@ internal static class Program
             return 2;
         }
 
+        // Select engine and model
+        var (engine, model) = EngineModelSelector.SelectEngineAndModel(argumentParser.Engine, argumentParser.Model);
+
         // Extract source language from filename (e.g., "en" from "en.json")
         var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
 
+        // Load prompt files
         ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process file.");
         var promptFile = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "translation-prompt.txt");
         var prompt = await File.ReadAllTextAsync(promptFile);
 
         string? extraPrompt = null;
-        if (!string.IsNullOrWhiteSpace(extraPromptPath))
-            extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(extraPromptPath));
+        if (!string.IsNullOrWhiteSpace(argumentParser.ExtraPromptPath))
+            extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(argumentParser.ExtraPromptPath));
 
         var hashesPath = GetHashesFilePath(basePath);
 
@@ -127,7 +81,7 @@ internal static class Program
         var previousHashes = await LoadHashesAsync(hashesPath);
 
         // Handle rebuild hashes only
-        if (rebuildHashes)
+        if (argumentParser.RebuildHashes)
         {
             await SaveHashesAsync(hashesPath, currentMd5);
             Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
@@ -136,7 +90,7 @@ internal static class Program
 
         var changedKeys = DetermineChangedKeys(baseMap.Keys, currentMd5, previousHashes);
 
-        if (showChanges)
+        if (argumentParser.ShowChanges)
         {
             Console.WriteLine($"Changed keys since last translation: {changedKeys.Count}");
             foreach (var key in changedKeys)
@@ -146,24 +100,17 @@ internal static class Program
             return 0;
         }
 
-        // Get API key based on engine type
+        // Get API key
+        var apiKey = argumentParser.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            apiKey = engine.ToLowerInvariant() switch
-            {
-                "gpt" or "chatgpt" => Environment.GetEnvironmentVariable("OPENAI_API_KEY"),
-                "gemini" => Environment.GetEnvironmentVariable("GEMINI_API_KEY"),
-                _ => Environment.GetEnvironmentVariable("GEMINI_API_KEY") // fallback to Gemini
-            };
+            var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
+            apiKey = Environment.GetEnvironmentVariable(envVarName);
         }
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            var envVarName = engine.ToLowerInvariant() switch
-            {
-                "gpt" or "chatgpt" => "OPENAI_API_KEY",
-                _ => "GEMINI_API_KEY"
-            };
+            var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
             await Console.Error.WriteLineAsync($"Error: Missing API key. Provide via --api-key or {envVarName} env var.");
             return 4;
         }
@@ -184,11 +131,11 @@ internal static class Program
             .ToList();
 
         // Handle rebuild specific language
-        if (!string.IsNullOrWhiteSpace(rebuildLang))
+        if (!string.IsNullOrWhiteSpace(argumentParser.RebuildLang))
         {
-            var rebuildPath = Path.Combine(dir, $"{rebuildLang}.json");
+            var rebuildPath = Path.Combine(dir, $"{argumentParser.RebuildLang}.json");
             await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
-                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: batchSize, isRebuild: true);
+                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize, isRebuild: true);
         }
         else
         {
@@ -198,7 +145,7 @@ internal static class Program
             foreach (var localePath in files)
             {
                 await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
-                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: batchSize);
+                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize);
             }
         }
 
@@ -337,46 +284,6 @@ internal static class Program
             Prompt = promptBuilder.ToString(),
             Items = items
         };
-    }
-
-    private static string GetArgValue(string[] args, ref int i)
-    {
-        if (i + 1 < args.Length) { return args[++i]; }
-        return string.Empty;
-    }
-
-    private static void PrintHelp()
-    {
-        Console.WriteLine("Resource Translator");
-        Console.WriteLine("Usage: vhtranslator [options]");
-        Console.WriteLine("Options:");
-        Console.WriteLine("  -b, --base <path>          Path to base language file (e.g., en.json, fr.json, de.json)");
-        Console.WriteLine("  -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt");
-        Console.WriteLine("  -c, --show-changes         Show changed keys since last translation and exit");
-        Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
-        Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
-        Console.WriteLine("  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY env var)");
-        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-2.5-flash-lite)");
-        Console.WriteLine("  -e, --engine <name>        Translation engine: gemini or gpt (default: gemini)");
-        Console.WriteLine("  -n, --batch <number>       Batch size for translation requests (default: 20)");
-        Console.WriteLine("  -h, --help                 Show help");
-        Console.WriteLine();
-        Console.WriteLine("Examples:");
-        Console.WriteLine("  vhtranslator -b locales/en.json");
-        Console.WriteLine("  vhtranslator -b locales/en.json -e gpt -m gpt-4o-mini");
-        Console.WriteLine("  vhtranslator -b locales/fr.json -r es -e gemini");
-        Console.WriteLine("  vhtranslator -b locales/en.json -x custom-prompt.txt -e chatgpt");
-        Console.WriteLine("  vhtranslator -b locales/de.json -c");
-        Console.WriteLine();
-        Console.WriteLine("Engines:");
-        Console.WriteLine("  gemini    - Google Gemini (requires GEMINI_API_KEY)");
-        Console.WriteLine("  gpt       - OpenAI ChatGPT (requires OPENAI_API_KEY)");
-        Console.WriteLine("  chatgpt   - Alias for gpt");
-        Console.WriteLine();
-        Console.WriteLine("Notes:");
-        Console.WriteLine("  - Any language can be used as the base source for translations");
-        Console.WriteLine("  - Missing entries in target languages are always translated regardless of hash changes");
-        Console.WriteLine("  - Use --ignore-changes after manual translations to avoid re-translating unchanged entries");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)

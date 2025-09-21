@@ -1,10 +1,10 @@
 ﻿# VpnHood Resource Translator
 
-An intelligent i18n resource translator that uses Google's Gemini AI to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
+An intelligent i18n resource translator that uses AI (Google Gemini or OpenAI ChatGPT) to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
 
 ## Features
 
-- 🤖 **AI-Powered Translation** - Uses Google Gemini AI for high-quality translations
+- 🤖 **Multi-Engine AI Translation** - Supports Google Gemini and OpenAI ChatGPT with smart engine detection
 - 🔄 **Incremental Updates** - Only translates changed entries using hash-based tracking
 - 🎯 **Smart Placeholder Preservation** - Keeps `{variables}`, HTML tags, and URLs intact
 - 📁 **Batch Processing** - Translates multiple language files simultaneously
@@ -12,12 +12,15 @@ An intelligent i18n resource translator that uses Google's Gemini AI to automati
 - 🔧 **Customizable Prompts** - Template-based prompts with custom instructions
 - 📊 **Progress Tracking** - Real-time progress for large translation jobs
 - 🛡️ **Robust Error Handling** - Automatic retries and detailed error messages
+- 🧠 **Intelligent Engine Detection** - Automatically selects the right AI engine based on model name
 
 ## Installation
 
 ### Prerequisites
 - .NET 8.0 or later
-- Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+- API key for your preferred service:
+  - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+  - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 
 ### Build from Source
 ```bash
@@ -30,15 +33,50 @@ dotnet build --configuration Release
 
 1. **Set your API key**:
    ```bash
-   export GEMINI_API_KEY="your-api-key-here"
-   # or on Windows:
-   set GEMINI_API_KEY=your-api-key-here
+   # For Gemini (default)
+   export GEMINI_API_KEY="your-gemini-api-key-here"
+   
+   # For OpenAI ChatGPT
+   export OPENAI_API_KEY="your-openai-api-key-here"
+   
+   # On Windows:
+   set GEMINI_API_KEY=your-gemini-api-key-here
+   set OPENAI_API_KEY=your-openai-api-key-here
    ```
 
-2. **Basic translation**:
+2. **Basic translation** (uses Gemini by default):
    ```bash
    vhtranslator -b locales/en.json
    ```
+
+3. **Use ChatGPT instead**:
+   ```bash
+   vhtranslator -b locales/en.json -m gpt-4o-mini
+   ```
+
+## Engine and Model Selection
+
+The translator now features **intelligent engine detection**:
+
+- **Auto-detection**: If no engine is specified, it's automatically detected from the model name
+- **Gemini models**: Any model containing "gemini" uses the Gemini engine
+- **ChatGPT models**: All other models (gpt-4, gpt-3.5-turbo, etc.) use the ChatGPT engine
+- **Manual override**: Use `-e` to explicitly specify the engine
+
+### Examples:
+```bash
+# Auto-detects Gemini engine
+vhtranslator -b locales/en.json -m gemini-2.5-flash
+
+# Auto-detects ChatGPT engine  
+vhtranslator -b locales/en.json -m gpt-4o-mini
+
+# Explicitly specify engine
+vhtranslator -b locales/en.json -e gpt -m gpt-4-turbo
+
+# Default behavior (Gemini)
+vhtranslator -b locales/en.json
+```
 
 ## Usage
 
@@ -53,68 +91,43 @@ Options:
   -c, --show-changes         Show changed keys since last translation and exit
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
   -i, --ignore-changes       Rebuild hash file to mark all entries as current
-  -k, --api-key <key>        Gemini API key (or set GEMINI_API_KEY env var)
-  -m, --model <name>         Gemini model (default: gemini-2.5-flash-lite)
+  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY env var)
+  -m, --model <name>         AI model (default: gemini-2.5-flash-lite)
+  -e, --engine <name>        Translation engine: gemini or gpt (default: auto-detected)
   -n, --batch <number>       Batch size for translation requests (default: 20)
   -h, --help                 Show help
 ```
 
 ### Examples
 
-#### Basic Translation (English as Source)
-Translate all locale files using English as the base:
+#### Basic Translation with Different Engines
 ```bash
+# Use Gemini (default)
 vhtranslator -b locales/en.json
-```
 
-#### Use French as Source Language
-Translate from French to other languages:
-```bash
-vhtranslator -b locales/fr.json
-```
+# Use ChatGPT with auto-detection
+vhtranslator -b locales/en.json -m gpt-4o-mini
 
-#### Force Rebuild a Language
-Retranslate all entries for Spanish from English base:
-```bash
-vhtranslator -b locales/en.json -r es
-```
-
-#### Cross-Language Translation
-Translate from German to Spanish:
-```bash
-vhtranslator -b locales/de.json -r es
-```
-
-#### Show What Changed
-See which keys have changed since last translation:
-```bash
-vhtranslator -b locales/en.json -c
-```
-
-#### Use Custom Instructions
-Add custom translation rules via a text file:
-```bash
-vhtranslator -b locales/en.json -x custom-prompt.txt
-```
-
-#### Reset Hash State
-Mark all entries as current without translating:
-```bash
-vhtranslator -b locales/en.json -i
-```
-
-#### Use Different Model
-Use a different Gemini model:
-```bash
+# Use specific Gemini model
 vhtranslator -b locales/en.json -m gemini-2.5-pro
+
+# Explicitly specify engine
+vhtranslator -b locales/en.json -e gpt -m gpt-4-turbo
 ```
 
-#### Skip Specific Translations
-Create custom rules to skip certain translations:
+#### Advanced Usage
 ```bash
-# Create custom-prompt.txt with skip rules
-echo "For Chinese: Return '*' for any key containing 'PRIVACY' or 'LEGAL'" > custom-prompt.txt
-vhtranslator -b locales/en.json -x custom-prompt.txt
+# Use French as source language with ChatGPT
+vhtranslator -b locales/fr.json -m gpt-4o-mini
+
+# Force rebuild Spanish with Gemini
+vhtranslator -b locales/en.json -r es -e gemini
+
+# Use custom instructions with ChatGPT
+vhtranslator -b locales/en.json -x custom-prompt.txt -m gpt-4
+
+# Show what changed since last translation
+vhtranslator -b locales/en.json -c
 ```
 
 ## File Structure
@@ -200,7 +213,7 @@ Translation Guidelines:
 4. Review and commit changes
 
 ### Setting Up New Language
-1. Create empty `locales/it.json` file: `{}`
+1. Create empty `locales/it.json` file: `{}` 
 2. Run: `vhtranslator -b locales/en.json -r it`
 3. All entries get translated for Italian
 
