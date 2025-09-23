@@ -283,6 +283,7 @@ internal static class Program
     {
         var options = new JsonSerializerOptions {
             WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
         await using var fs = File.Create(path);
         await JsonSerializer.SerializeAsync(fs, obj, options);

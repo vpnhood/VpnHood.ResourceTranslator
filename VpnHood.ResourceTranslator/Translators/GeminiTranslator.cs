@@ -20,6 +20,8 @@ internal sealed class GeminiTranslator(
         var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
         {
             ResponseMimeType = "application/json",
+            
+            
         }, cancellationToken: cancellationToken);
 
         if (response.Text == null)
