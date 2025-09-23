@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using VpnHood.ResourceTranslator.Models;
@@ -14,35 +15,30 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         var argumentParser = new ArgumentParser();
-        
-        if (!argumentParser.Parse(args))
-        {
+
+        if (!argumentParser.Parse(args)) {
             return 1;
         }
 
-        if (argumentParser.ShowHelp)
-        {
+        if (argumentParser.ShowHelp) {
             ArgumentParser.PrintHelp();
             return 0;
         }
 
         // Get base path
         var basePath = argumentParser.BasePath;
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
+        if (string.IsNullOrWhiteSpace(basePath)) {
             Console.Write("Enter path to base language file (e.g., en.json, fr.json): ");
             basePath = Console.ReadLine();
         }
 
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
+        if (string.IsNullOrWhiteSpace(basePath)) {
             await Console.Error.WriteLineAsync("Error: Base language file path is required.");
             return 1;
         }
 
         basePath = Path.GetFullPath(basePath);
-        if (!File.Exists(basePath))
-        {
+        if (!File.Exists(basePath)) {
             await Console.Error.WriteLineAsync($"Error: File not found: {basePath}");
             return 2;
         }
@@ -65,8 +61,7 @@ internal static class Program
         var hashesPath = GetHashesFilePath(basePath);
 
         // Load base language file
-        if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr))
-        {
+        if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr)) {
             await Console.Error.WriteLineAsync($"Error: Failed to parse base JSON: {loadErr}");
             return 3;
         }
@@ -81,8 +76,7 @@ internal static class Program
         var previousHashes = await LoadHashesAsync(hashesPath);
 
         // Handle rebuild hashes only
-        if (argumentParser.RebuildHashes)
-        {
+        if (argumentParser.RebuildHashes) {
             await SaveHashesAsync(hashesPath, currentMd5);
             Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
             return 0;
@@ -90,11 +84,9 @@ internal static class Program
 
         var changedKeys = DetermineChangedKeys(baseMap.Keys, currentMd5, previousHashes);
 
-        if (argumentParser.ShowChanges)
-        {
+        if (argumentParser.ShowChanges) {
             Console.WriteLine($"Changed keys since last translation: {changedKeys.Count}");
-            foreach (var key in changedKeys)
-            {
+            foreach (var key in changedKeys) {
                 Console.WriteLine($" - {key}");
             }
             return 0;
@@ -102,22 +94,19 @@ internal static class Program
 
         // Get API key
         var apiKey = argumentParser.ApiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
+        if (string.IsNullOrWhiteSpace(apiKey)) {
             var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
             apiKey = Environment.GetEnvironmentVariable(envVarName);
         }
 
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
+        if (string.IsNullOrWhiteSpace(apiKey)) {
             var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
             await Console.Error.WriteLineAsync($"Error: Missing API key. Provide via --api-key or {envVarName} env var.");
             return 4;
         }
 
         // Create translator based on engine
-        ITranslator translator = engine.ToLowerInvariant() switch
-        {
+        ITranslator translator = engine.ToLowerInvariant() switch {
             "gpt" or "chatgpt" => new ChatGptTranslator(apiKey, model),
             "gemini" => new GeminiTranslator(apiKey, model),
             "meta" or "meta-ai" => new MetaAiTranslator(apiKey, model),
@@ -133,19 +122,16 @@ internal static class Program
             .ToList();
 
         // Handle rebuild specific language
-        if (!string.IsNullOrWhiteSpace(argumentParser.RebuildLang))
-        {
+        if (!string.IsNullOrWhiteSpace(argumentParser.RebuildLang)) {
             var rebuildPath = Path.Combine(dir, $"{argumentParser.RebuildLang}.json");
             await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
                 prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize, isRebuild: true);
         }
-        else
-        {
+        else {
             if (files.Count == 0)
                 Console.WriteLine("No sibling locale files found to translate.");
 
-            foreach (var localePath in files)
-            {
+            foreach (var localePath in files) {
                 await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
                     prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize);
             }
@@ -190,15 +176,13 @@ internal static class Program
 
         // Pre-populate output with existing values or base for URLs
         var itemsToTranslate = new List<TranslateItem>(totalKeys);
-        foreach (var key in orderedKeys)
-        {
+        foreach (var key in orderedKeys) {
             var baseText = baseMap[key];
             var hasExisting = localeMap.TryGetValue(key, out var existingValue) && !string.IsNullOrWhiteSpace(existingValue);
             var isMissing = !hasExisting;
             var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
 
-            if (needsTranslation && LooksLikeUrl(baseText))
-            {
+            if (needsTranslation && LooksLikeUrl(baseText)) {
                 output[key] = baseText; // keep URLs as-is
                 continue;
             }
@@ -206,10 +190,8 @@ internal static class Program
             // default output is the existing translation if any, or empty
             output[key] = hasExisting ? existingValue : string.Empty;
 
-            if (needsTranslation && !LooksLikeUrl(baseText))
-            {
-                itemsToTranslate.Add(new TranslateItem
-                {
+            if (needsTranslation && !LooksLikeUrl(baseText)) {
+                itemsToTranslate.Add(new TranslateItem {
                     SourceLanguage = sourceLanguage,
                     TargetLanguage = localeCode,
                     Key = key,
@@ -219,8 +201,7 @@ internal static class Program
         }
 
         // Batch translate items
-        for (int i = 0; i < itemsToTranslate.Count; i += Math.Max(1, batchSize))
-        {
+        for (int i = 0; i < itemsToTranslate.Count; i += Math.Max(1, batchSize)) {
             var batch = itemsToTranslate.Skip(i).Take(Math.Max(1, batchSize)).ToArray();
             if (batch.Length == 0) break;
 
@@ -228,19 +209,16 @@ internal static class Program
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
             TranslateResult[] results;
-            try
-            {
+            try {
                 await Task.Delay(500, cts.Token); // brief pause to avoid rate limits
                 results = await translator.TranslateAsync(promptOptions, cts.Token);
             }
-            catch (OperationCanceledException)
-            {
+            catch (OperationCanceledException) {
                 await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {i}. Skipping this batch.");
                 continue;
             }
 
-            foreach (var res in results)
-            {
+            foreach (var res in results) {
                 // Skip if instructed
                 if (res.TranslatedText.Trim() == "*")
                     continue;
@@ -252,8 +230,7 @@ internal static class Program
                 translatedCount++;
             }
 
-            if (isRebuild)
-            {
+            if (isRebuild) {
                 var done = Math.Min(i + batch.Length, itemsToTranslate.Count);
                 Console.WriteLine($"  Progress: {done}/{itemsToTranslate.Count} ({(done * 100 / Math.Max(1, itemsToTranslate.Count)):F0}%)");
             }
@@ -261,7 +238,7 @@ internal static class Program
 
         // Write JSON preserving base order
         await WriteJsonAsync(localePath, output);
-        
+
         if (isRebuild)
             Console.WriteLine($"✓ {Path.GetFileName(localePath)}: Rebuilt with {translatedCount} translations.");
         else if (translatedCount > 0)
@@ -274,15 +251,13 @@ internal static class Program
     {
         var promptBuilder = new StringBuilder(prompt);
 
-        if (!string.IsNullOrWhiteSpace(extraPrompt))
-        {
+        if (!string.IsNullOrWhiteSpace(extraPrompt)) {
             promptBuilder.AppendLine();
             promptBuilder.AppendLine("Additional guidelines:");
             promptBuilder.AppendLine(extraPrompt);
         }
 
-        return new PromptOptions
-        {
+        return new PromptOptions {
             Prompt = promptBuilder.ToString(),
             Items = items
         };
@@ -290,16 +265,14 @@ internal static class Program
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
     {
-        try
-        {
+        try {
             var text = File.ReadAllText(path);
             var doc = JsonNode.Parse(text) as JsonObject;
             obj = doc ?? throw new Exception("Root is not a JSON object.");
             error = null;
             return true;
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
             obj = null;
             error = ex.Message;
             return false;
@@ -308,10 +281,8 @@ internal static class Program
 
     private static async Task WriteJsonAsync(string path, JsonObject obj)
     {
-        var options = new JsonSerializerOptions
-        {
+        var options = new JsonSerializerOptions {
             WriteIndented = true,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
         await using var fs = File.Create(path);
         await JsonSerializer.SerializeAsync(fs, obj, options);
@@ -320,8 +291,7 @@ internal static class Program
     private static Dictionary<string, string> ComputeMd5Hashes(Dictionary<string, string> map)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (k, v) in map)
-        {
+        foreach (var (k, v) in map) {
             result[k] = Md5Hex(v);
         }
         return result;
@@ -337,14 +307,12 @@ internal static class Program
     private static async Task<Dictionary<string, string>> LoadHashesAsync(string path)
     {
         if (!File.Exists(path)) return new Dictionary<string, string>(StringComparer.Ordinal);
-        try
-        {
+        try {
             var txt = await File.ReadAllTextAsync(path);
             var obj = JsonSerializer.Deserialize<Dictionary<string, string>>(txt) ?? new();
             return new Dictionary<string, string>(obj, StringComparer.Ordinal);
         }
-        catch
-        {
+        catch {
             return new Dictionary<string, string>(StringComparer.Ordinal);
         }
     }
@@ -363,12 +331,10 @@ internal static class Program
         Dictionary<string, string> previous)
     {
         var changed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in keys)
-        {
+        foreach (var key in keys) {
             var cur = currentMd5.GetValueOrDefault(key);
             var prev = previous.GetValueOrDefault(key);
-            if (!string.Equals(cur, prev, StringComparison.Ordinal))
-            {
+            if (!string.Equals(cur, prev, StringComparison.Ordinal)) {
                 changed.Add(key);
             }
         }
@@ -396,17 +362,14 @@ internal static class Program
         // Remove wrapping quotes/backticks if present
         if ((translated.StartsWith("\"") && translated.EndsWith("\"")) ||
             (translated.StartsWith("'") && translated.EndsWith("'")) ||
-            (translated.StartsWith("`") && translated.EndsWith("`")))
-        {
+            (translated.StartsWith("`") && translated.EndsWith("`"))) {
             translated = translated.Substring(1, translated.Length - 2);
         }
 
         // Ensure placeholders like {x} remain present
         var tokens = ExtractPlaceholders(source);
-        foreach (var token in tokens)
-        {
-            if (!translated.Contains(token, StringComparison.Ordinal))
-            {
+        foreach (var token in tokens) {
+            if (!translated.Contains(token, StringComparison.Ordinal)) {
                 // If token missing, append it to avoid breaking runtime formatting
                 translated = translated + (translated.EndsWith(" ") ? string.Empty : " ") + token;
             }
@@ -418,13 +381,10 @@ internal static class Program
     {
         var list = new List<string>();
         if (string.IsNullOrEmpty(s)) return list;
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '{')
-            {
+        for (var i = 0; i < s.Length; i++) {
+            if (s[i] == '{') {
                 var j = s.IndexOf('}', i + 1);
-                if (j > i)
-                {
+                if (j > i) {
                     list.Add(s.Substring(i, j - i + 1));
                     i = j;
                 }
