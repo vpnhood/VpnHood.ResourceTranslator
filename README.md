@@ -1,5 +1,3 @@
-﻿# VpnHood Resource Translator
-
 An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI ChatGPT, or Grok AI) to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
 
 ## Features
@@ -13,6 +11,8 @@ An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI Chat
 - 📊 **Progress Tracking** - Real-time progress for large translation jobs
 - 🛡️ **Robust Error Handling** - Automatic retries and detailed error messages
 - 🧠 **Intelligent Engine Detection** - Automatically selects the right AI engine based on model name
+
+<img width="500" alt="Gemini_Generated_Image_45do0g45do0g45do (1)" src="https://github.com/user-attachments/assets/b661d5e1-fe5d-4bc7-9ad1-187e72281b7d" />
 
 ## Installation
 
