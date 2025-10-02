@@ -33,7 +33,7 @@ public static class TranslateUtils
                 SourceLanguage = "en",
                 TargetLanguage = "fr",
                 Key = "Key1",
-                Text = "SourceText1",
+                SourceText = "SourceText1",
                 TranslatedText = "TranslatedText1"
             },
             new()
@@ -41,7 +41,7 @@ public static class TranslateUtils
                 SourceLanguage = "en",
                 TargetLanguage = "it",
                 Key = "Key2",
-                Text = "SourceText2",
+                SourceText = "SourceText2",
                 TranslatedText = "TranslatedText2"
             }
         };

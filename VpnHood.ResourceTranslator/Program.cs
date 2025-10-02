@@ -182,7 +182,7 @@ internal static class Program
             var isMissing = !hasExisting;
             var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
 
-            if (needsTranslation && LooksLikeUrl(baseText)) {
+            if (needsTranslation && !ShouldTranslate(baseText)) {
                 output[key] = baseText; // keep URLs as-is
                 continue;
             }
@@ -190,7 +190,7 @@ internal static class Program
             // default output is the existing translation if any, or empty
             output[key] = hasExisting ? existingValue : string.Empty;
 
-            if (needsTranslation && !LooksLikeUrl(baseText)) {
+            if (needsTranslation && ShouldTranslate(baseText)) {
                 itemsToTranslate.Add(new TranslateItem {
                     SourceLanguage = sourceLanguage,
                     TargetLanguage = localeCode,
@@ -350,10 +350,11 @@ internal static class Program
         return Path.Combine(baseDir, "vh_translator", $"{baseLang}_watch.json");
     }
 
-    private static bool LooksLikeUrl(string s)
+    private static bool ShouldTranslate(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
-        return s.Contains("://", StringComparison.Ordinal) || s.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
+        return true;
+        //return s.Contains("://", StringComparison.Ordinal) || s.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string PostProcessTranslation(string source, string? translated)

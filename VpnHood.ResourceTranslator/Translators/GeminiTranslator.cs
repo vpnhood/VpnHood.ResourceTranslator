@@ -20,15 +20,13 @@ internal sealed class GeminiTranslator(
         var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
         {
             ResponseMimeType = "application/json",
-            
-            
         }, cancellationToken: cancellationToken);
 
         if (response.Text == null)
             throw new Exception("AI result is null");
 
         return JsonSerializer.Deserialize<TranslateResult[]>(response.Text)
-               ?? throw new Exception("AI result deserialization failed");
+               ?? throw new Exception("AI result deserialization failed.");
 
     }
 }

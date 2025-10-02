@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using VpnHood.ResourceTranslator.Models;
+using VpnHood.ResourceTranslator.Translators;
 
 namespace VpnHood.ResourceTranslator.Test;
 
