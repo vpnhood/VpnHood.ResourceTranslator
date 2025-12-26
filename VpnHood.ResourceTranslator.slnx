@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".github/copilot-instructions.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="VpnHood.ResourceTranslator.Test/VpnHood.ResourceTranslator.Test.csproj" />
+  <Project Path="VpnHood.ResourceTranslator/VpnHood.ResourceTranslator.csproj" />
+</Solution>

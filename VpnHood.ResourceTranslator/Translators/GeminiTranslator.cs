@@ -1,6 +1,6 @@
 ﻿using Mscc.GenerativeAI;
-using System.Text;
 using System.Text.Json;
+using Mscc.GenerativeAI.Types;
 using VpnHood.ResourceTranslator.Models;
 
 namespace VpnHood.ResourceTranslator.Translators;
