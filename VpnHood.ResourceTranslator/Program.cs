@@ -10,7 +10,7 @@ namespace VpnHood.ResourceTranslator;
 
 internal static class Program
 {
-    private const int DefaultTranslateTimeoutSeconds = 90;
+    private const int DefaultTranslateTimeoutSeconds = 100;
 
     private static async Task<int> Main(string[] args)
     {
