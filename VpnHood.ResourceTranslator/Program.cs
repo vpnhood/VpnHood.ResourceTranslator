@@ -57,7 +57,9 @@ internal static class Program
         string? extraPrompt = null;
         if (!string.IsNullOrWhiteSpace(argumentParser.ExtraPromptPath))
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(argumentParser.ExtraPromptPath));
-
+        else if (File.Exists(GetCustomPromptFilePath(basePath)))
+            extraPrompt = GetCustomPromptFilePath(basePath);
+        
         var hashesPath = GetHashesFilePath(basePath);
 
         // Load base language file
@@ -207,16 +209,7 @@ internal static class Program
 
             var promptOptions = BuildPromptOptionsForBatch(batch, prompt, extraPrompt);
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
-            TranslateResult[] results;
-            try {
-                await Task.Delay(500, cts.Token); // brief pause to avoid rate limits
-                results = await translator.TranslateAsync(promptOptions, cts.Token);
-            }
-            catch (OperationCanceledException) {
-                await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {i}. Skipping this batch.");
-                continue;
-            }
+            var results = await TranslateBatchWithRetryAsync(translator, promptOptions, localePath, i);
 
             foreach (var res in results) {
                 // Skip if instructed
@@ -261,6 +254,35 @@ internal static class Program
             Prompt = promptBuilder.ToString(),
             Items = items
         };
+    }
+
+    private static async Task<TranslateResult[]> TranslateBatchWithRetryAsync(
+        ITranslator translator,
+        PromptOptions promptOptions,
+        string localePath,
+        int batchStartIndex,
+        int retryCount = 5)
+    {
+        var attempt = 0;
+
+        while (attempt < retryCount) {
+            attempt++;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
+            try {
+                await Task.Delay(500, cts.Token); // brief pause to avoid rate limits
+                return await translator.TranslateAsync(promptOptions, cts.Token);
+            }
+            catch (OperationCanceledException) {
+                await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}).");
+                await Task.Delay(500, cts.Token); // extra wait to avoid rate limits
+            }
+            catch (Exception ex) {
+                await Console.Error.WriteLineAsync($"Error while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}): {ex.Message}.");
+                await Task.Delay(500, cts.Token); // extra wait to avoid rate limits
+            }
+        }
+
+        throw new Exception($"Failed to translate {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} after {retryCount} attempts.");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
@@ -342,12 +364,23 @@ internal static class Program
         return changed;
     }
 
-    private static string GetHashesFilePath(string basePath)
+    private static string GetPrivateFolderPath(string basePath)
     {
         // Location: <baseDir>/vh_translator/<baseLang>_watch.json
         var baseDir = Path.GetDirectoryName(basePath)!;
+        return Path.Combine(baseDir, "vh_translator");
+
+    }
+
+    private static string GetCustomPromptFilePath(string basePath)
+    {
+        return Path.Combine(GetPrivateFolderPath(basePath), "custom_prompt.txt");
+    }
+
+    private static string GetHashesFilePath(string basePath)
+    {
         var baseLang = Path.GetFileNameWithoutExtension(basePath);
-        return Path.Combine(baseDir, "vh_translator", $"{baseLang}_watch.json");
+        return Path.Combine(GetPrivateFolderPath(basePath), $"{baseLang}_watch.json");
     }
 
     private static bool ShouldTranslate(string s)
