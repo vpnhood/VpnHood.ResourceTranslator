@@ -208,8 +208,11 @@ internal static class Program
             if (batch.Length == 0) break;
 
             var promptOptions = BuildPromptOptionsForBatch(batch, prompt, extraPrompt);
-
             var results = await TranslateBatchWithRetryAsync(translator, promptOptions, localePath, i);
+            
+            // check results count
+            if (results.Length != batch.Length) 
+                throw new Exception($"Translation result count mismatch for {Path.GetFileName(localePath)} at batch starting index {i}. Expected {batch.Length}, got {results.Length}.");
 
             foreach (var res in results) {
                 // Skip if instructed
