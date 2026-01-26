@@ -2,7 +2,7 @@ namespace VpnHood.ResourceTranslator.Models;
 
 public static class EngineModelSelector
 {
-    private const string DefaultModel = "gemini-2.5-flash-lite";
+    private const string DefaultModel = "gemini-flash-lite-latest";
     private const string DefaultEngine = "gemini";
 
     public static (string engine, string model) SelectEngineAndModel(string? requestedEngine, string? requestedModel)

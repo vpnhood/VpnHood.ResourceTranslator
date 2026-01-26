@@ -105,7 +105,7 @@ Options:
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
   -i, --ignore-changes       Rebuild hash file to mark all entries as current
   -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)
-  -m, --model <name>         AI model (default: gemini-2.5-flash-lite)
+  -m, --model <name>         AI model (default: gemini-flash-lite-latest)
   -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected)
   -n, --batch <number>       Batch size for translation requests (default: 20)
   -h, --help                 Show help
@@ -380,7 +380,7 @@ Error: Failed to parse base JSON
 
 ### Rate Limiting
 If you hit API rate limits:
-- **Gemini**: Use `gemini-2.5-flash-lite` model (faster, cheaper)
+- **Gemini**: Use `gemini-flash-lite-latest` model (faster, cheaper)
 - **ChatGPT**: Use `gpt-3.5-turbo` for faster, cheaper requests
 - **Grok**: Monitor usage and implement delays if needed
 - Add delays between requests (built-in retry logic)

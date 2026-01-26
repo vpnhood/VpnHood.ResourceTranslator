@@ -88,7 +88,7 @@ internal class ArgumentParser
         Console.WriteLine("  -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language (e.g., 'fr', 'es')");
         Console.WriteLine("  -i, --ignore-changes       Rebuild hash file to mark all entries as current (no translation)");
         Console.WriteLine("  -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)");
-        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-2.5-flash-lite, grok-4-latest for grok engine)");
+        Console.WriteLine("  -m, --model <name>         AI model (default: gemini-flash-lite-latest, grok-4-latest for grok engine)");
         Console.WriteLine("  -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected from model)");
         Console.WriteLine("  -n, --batch <number>       Batch size for translation requests (default: 20)");
         Console.WriteLine("  -h, --help                 Show help");
