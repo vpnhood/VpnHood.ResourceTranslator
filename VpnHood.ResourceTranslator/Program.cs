@@ -58,7 +58,7 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(argumentParser.ExtraPromptPath))
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(argumentParser.ExtraPromptPath));
         else if (File.Exists(GetCustomPromptFilePath(basePath)))
-            extraPrompt = GetCustomPromptFilePath(basePath);
+            extraPrompt = await File.ReadAllTextAsync(GetCustomPromptFilePath(basePath));
         
         var hashesPath = GetHashesFilePath(basePath);
 
@@ -272,16 +272,16 @@ internal static class Program
             attempt++;
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
             try {
-                await Task.Delay(500, cts.Token); // brief pause to avoid rate limits
+                await Task.Delay(500, CancellationToken.None); // brief pause to avoid rate limits
                 return await translator.TranslateAsync(promptOptions, cts.Token);
             }
             catch (OperationCanceledException) {
                 await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}).");
-                await Task.Delay(500, cts.Token); // extra wait to avoid rate limits
+                await Task.Delay(500, CancellationToken.None); // extra wait to avoid rate limits
             }
             catch (Exception ex) {
                 await Console.Error.WriteLineAsync($"Error while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}): {ex.Message}.");
-                await Task.Delay(500, cts.Token); // extra wait to avoid rate limits
+                await Task.Delay(500, CancellationToken.None); // extra wait to avoid rate limits
             }
         }
 
