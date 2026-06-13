@@ -33,7 +33,7 @@ internal static class Program
             Description = "Force rebuild/translate all items for specific language (e.g., 'fr', 'es')"
         };
         var ignoreChangesOption = new Option<bool>("--ignore-changes", "-i") {
-            Description = "Rebuild hash file to mark all entries as current (no translation)"
+            Description = "Rebuild watch file to mark all entries as current (no translation)"
         };
         var apiKeyOption = new Option<string?>("--api-key", "-k") {
             Description = "API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)"
@@ -57,7 +57,7 @@ internal static class Program
             "Translates JSON i18n resource files using AI (Google Gemini, OpenAI ChatGPT, or Grok AI) " +
             "while preserving placeholders, HTML tags, and formatting. " +
             "The engine is auto-detected from the model name if not specified; " +
-            "missing entries in target languages are always translated regardless of hash changes.") {
+            "missing entries in target languages are always translated regardless of source changes.") {
             baseOption,
             extraPromptOption,
             showChangesOption,
@@ -78,7 +78,7 @@ internal static class Program
                 Engine = parseResult.GetValue(engineOption),
                 ShowChanges = parseResult.GetValue(showChangesOption),
                 RebuildLang = parseResult.GetValue(rebuildLangOption),
-                RebuildHashes = parseResult.GetValue(ignoreChangesOption),
+                RebuildWatch = parseResult.GetValue(ignoreChangesOption),
                 BatchSize = parseResult.GetValue(batchOption)
             };
 
@@ -130,7 +130,7 @@ internal static class Program
         else if (File.Exists(GetCustomPromptFilePath(basePath)))
             extraPrompt = await File.ReadAllTextAsync(GetCustomPromptFilePath(basePath));
 
-        var hashesPath = GetHashesFilePath(basePath);
+        var watchPath = GetWatchFilePath(basePath);
 
         // Load base language file
         if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr)) {
@@ -141,20 +141,17 @@ internal static class Program
         var orderedKeys = baseObj!.Select(p => p.Key).ToList();
         var baseMap = baseObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
 
-        // Compute current hashes: MD5 only
-        var currentMd5 = ComputeMd5Hashes(baseMap);
+        // Load previous watch entries (source texts, or MD5 hashes for legacy watch files)
+        var (previousEntries, previousAreHashes) = await LoadWatchEntriesAsync(watchPath);
 
-        // Load previous hashes (MD5 file only)
-        var previousHashes = await LoadHashesAsync(hashesPath);
-
-        // Handle rebuild hashes only
-        if (options.RebuildHashes) {
-            await SaveHashesAsync(hashesPath, currentMd5);
-            Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
+        // Handle rebuild watch file only
+        if (options.RebuildWatch) {
+            await SaveWatchFileAsync(watchPath, orderedKeys, baseMap);
+            Console.WriteLine($"✓ Watch file rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
             return 0;
         }
 
-        var changedKeys = DetermineChangedKeys(baseMap.Keys, currentMd5, previousHashes);
+        var changedKeys = DetermineChangedKeys(baseMap, previousEntries, previousAreHashes);
 
         if (options.ShowChanges) {
             Console.WriteLine($"Changed keys since last translation: {changedKeys.Count}");
@@ -207,8 +204,9 @@ internal static class Program
             }
         }
 
-        // Save updated hashes (only after attempting translations)
-        await SaveHashesAsync(hashesPath, currentMd5);
+        // Save updated watch file (only after successful translations);
+        // this also migrates legacy hash-based watch files to the source-text format
+        await SaveWatchFileAsync(watchPath, orderedKeys, baseMap);
         Console.WriteLine("Done.");
         return 0;
     }
@@ -380,49 +378,61 @@ internal static class Program
         await JsonSerializer.SerializeAsync(fs, obj, OutputSerializerOptions);
     }
 
-    private static Dictionary<string, string> ComputeMd5Hashes(Dictionary<string, string> map)
+    private static string ComputeMd5(string value)
     {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (key, value) in map)
-            result[key] = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(value)));
-        return result;
+        return Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(value)));
     }
 
-    private static async Task<Dictionary<string, string>> LoadHashesAsync(string path)
+    private static async Task<(Dictionary<string, string> Entries, bool AreHashes)> LoadWatchEntriesAsync(string path)
     {
+        var empty = new Dictionary<string, string>(StringComparer.Ordinal);
         if (!File.Exists(path))
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return (empty, false);
 
         try {
             var txt = await File.ReadAllTextAsync(path);
-            var obj = JsonSerializer.Deserialize<Dictionary<string, string>>(txt) ?? new();
-            return new Dictionary<string, string>(obj, StringComparer.Ordinal);
+            if (JsonNode.Parse(txt) is not JsonObject obj)
+                return (empty, false);
+
+            // Versioned format: { "version": 1, "items": { key: sourceText } }
+            if (obj.ContainsKey("version")) {
+                var watch = obj.Deserialize<WatchFile>();
+                return (new Dictionary<string, string>(watch?.Items ?? new(), StringComparer.Ordinal), false);
+            }
+
+            // Legacy format: flat { key: md5Hash }
+            var legacy = obj.Deserialize<Dictionary<string, string>>() ?? new();
+            return (new Dictionary<string, string>(legacy, StringComparer.Ordinal), true);
         }
         catch {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return (empty, false);
         }
     }
 
-    private static async Task SaveHashesAsync(string path, Dictionary<string, string> hashes)
+    private static async Task SaveWatchFileAsync(string path, List<string> orderedKeys, Dictionary<string, string> baseMap)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        var txt = JsonSerializer.Serialize(hashes, options);
+        var items = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var key in orderedKeys)
+            items[key] = baseMap[key];
+
+        var watch = new WatchFile { Items = items };
+        var txt = JsonSerializer.Serialize(watch, OutputSerializerOptions);
         await File.WriteAllTextAsync(path, txt);
     }
 
-    private static HashSet<string> DetermineChangedKeys(IEnumerable<string> keys,
-        Dictionary<string, string> currentMd5,
-        Dictionary<string, string> previous)
+    private static HashSet<string> DetermineChangedKeys(
+        Dictionary<string, string> baseMap,
+        Dictionary<string, string> previousEntries,
+        bool previousAreHashes)
     {
         var changed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in keys) {
-            var cur = currentMd5.GetValueOrDefault(key);
-            var prev = previous.GetValueOrDefault(key);
-            if (!string.Equals(cur, prev, StringComparison.Ordinal))
+        foreach (var (key, text) in baseMap) {
+            var current = previousAreHashes ? ComputeMd5(text) : text;
+            if (!string.Equals(current, previousEntries.GetValueOrDefault(key), StringComparison.Ordinal))
                 changed.Add(key);
         }
         return changed;
@@ -439,7 +449,7 @@ internal static class Program
         return Path.Combine(GetPrivateFolderPath(basePath), "custom_prompt.txt");
     }
 
-    private static string GetHashesFilePath(string basePath)
+    private static string GetWatchFilePath(string basePath)
     {
         // Location: <baseDir>/vh_translator/<baseLang>_watch.json
         var baseLang = Path.GetFileNameWithoutExtension(basePath);

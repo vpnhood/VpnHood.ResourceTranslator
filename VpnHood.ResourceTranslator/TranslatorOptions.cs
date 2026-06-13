@@ -9,6 +9,6 @@ internal class TranslatorOptions
     public string? Engine { get; init; }
     public bool ShowChanges { get; init; }
     public string? RebuildLang { get; init; }
-    public bool RebuildHashes { get; init; }
+    public bool RebuildWatch { get; init; }
     public int BatchSize { get; init; }
 }

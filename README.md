@@ -3,7 +3,7 @@ An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI Chat
 ## Features
 
 - 🤖 **Multi-Engine AI Translation** - Supports Google Gemini, OpenAI ChatGPT, and Grok AI with smart engine detection
-- 🔄 **Incremental Updates** - Only translates changed entries using hash-based tracking
+- 🔄 **Incremental Updates** - Only translates changed entries by tracking the last-translated source text
 - 🎯 **Smart Placeholder Preservation** - Keeps `{variables}`, HTML tags, and URLs intact
 - 📁 **Batch Processing** - Translates multiple language files simultaneously
 - 🌐 **Flexible Source Language** - Use any language as the base source (not just English)
@@ -103,7 +103,7 @@ Options:
   -x, --extra-prompt <path>  Path to extra instructions text file for the AI prompt
   -c, --show-changes         Show changed keys since last translation and exit
   -r, --rebuild-lang <code>  Force rebuild/translate all items for specific language
-  -i, --ignore-changes       Rebuild hash file to mark all entries as current
+  -i, --ignore-changes       Rebuild watch file to mark all entries as current
   -k, --api-key <key>        API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)
   -m, --model <name>         AI model (default: gemini-flash-lite-latest)
   -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected)
@@ -161,7 +161,7 @@ locales/
 +-- es.json              # Spanish translations
 +-- de.json              # German translations
 +-- vh_translator/
-    +-- en_watch.json    # Hash tracking file (auto-generated)
+    +-- en_watch.json    # Change tracking file (auto-generated)
 ```
 
 **French as Base:**
@@ -172,12 +172,12 @@ locales/
 +-- es.json              # Spanish translations
 +-- de.json              # German translations
 +-- vh_translator/
-    +-- fr_watch.json    # Hash tracking file (auto-generated)
+    +-- fr_watch.json    # Change tracking file (auto-generated)
 ```
 
 ### Generated Files
 
-- `vh_translator/<base>_watch.json` - Tracks changes to detect what needs retranslation
+- `vh_translator/<base>_watch.json` - Versioned file storing the last-translated source text per key to detect what needs retranslation (legacy hash-based files are migrated automatically on the next successful run)
 
 ## Sample Files
 
