@@ -17,7 +17,7 @@ An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI Chat
 ## Installation
 
 ### Prerequisites
-- .NET 8.0 or later
+- .NET 10.0 SDK or later
 - API key for your preferred service:
   - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
   - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
@@ -25,7 +25,7 @@ An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI Chat
 
 ### Build from Source
 ```bash
-git clone https://github.com/your-repo/VpnHood.ResourceTranslator.git
+git clone https://github.com/vpnhood/VpnHood.ResourceTranslator.git
 cd VpnHood.ResourceTranslator
 dotnet build --configuration Release
 ```
@@ -297,9 +297,6 @@ Key-Specific Rules:
 export GEMINI_API_KEY="your-gemini-api-key"
 export OPENAI_API_KEY="your-openai-api-key" 
 export GROK_API_KEY="your-grok-api-key"
-
-# Optional
-export GEMINI_MODEL="gemini-2.5-flash"  # Override default model
 ```
 
 ## Best Practices

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using OpenAI;
 using OpenAI.Chat;
 using VpnHood.ResourceTranslator.Models;
@@ -10,34 +9,27 @@ internal sealed class ChatGptTranslator(
     string model)
     : ITranslator
 {
+    private readonly OpenAIClient _client = new(apiKey);
+
     public async Task<TranslateResult[]> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
     {
         var prompt = TranslateUtils.BuildPrompt(promptOptions);
+        var chatClient = _client.GetChatClient(model);
 
-        var client = new OpenAIClient(apiKey);
-        var chatClient = client.GetChatClient(model);
-
-        var messages = new List<ChatMessage>
-        {
+        var messages = new List<ChatMessage> {
             ChatMessage.CreateSystemMessage(TranslateUtils.BuildSystemPrompt()),
-            ChatMessage.CreateUserMessage(prompt),
+            ChatMessage.CreateUserMessage(prompt)
         };
 
-        var options = new ChatCompletionOptions
-        {
-            //ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() // doesn't work as expected
-        };
-
-        var response = await chatClient.CompleteChatAsync(messages, options, cancellationToken);
+        var response = await chatClient.CompleteChatAsync(messages, options: null, cancellationToken);
 
         if (response?.Value?.Content == null || response.Value.Content.Count == 0)
-            throw new Exception("AI result is null or empty");
+            throw new Exception("AI result is null or empty.");
 
         var content = response.Value.Content[0].Text;
         if (string.IsNullOrWhiteSpace(content))
-            throw new Exception("AI result content is null or empty");
+            throw new Exception("AI result content is null or empty.");
 
-        return JsonSerializer.Deserialize<TranslateResult[]>(content)
-               ?? throw new Exception("AI result deserialization failed");
+        return AiResponseParser.ParseResponse(content);
     }
 }

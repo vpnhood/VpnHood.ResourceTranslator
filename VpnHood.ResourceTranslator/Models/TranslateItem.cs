@@ -6,5 +6,4 @@ public class TranslateItem
     public required string TargetLanguage { get; set; }
     public required string Key { get; set; }
     public required string Text { get; set; }
-
 }

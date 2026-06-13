@@ -10,76 +10,43 @@ internal sealed class GrokAiTranslator(
     string model)
     : ITranslator
 {
+    private const string ApiUrl = "https://api.x.ai/v1/chat/completions";
     private static readonly HttpClient HttpClient = new();
 
     public async Task<TranslateResult[]> TranslateAsync(PromptOptions promptOptions, CancellationToken cancellationToken)
     {
         var prompt = TranslateUtils.BuildPrompt(promptOptions);
 
-        var requestBody = new
-        {
-            model = model,
-            messages = new[]
-            {
-                new
-                {
-                    role = "system",
-                    content = "You are a professional localization engine. " +
-                             "Return ONLY a valid JSON array of translation objects. " +
-                             "Do not wrap the array in any additional objects or properties. " +
-                             "Do not include any commentary, explanations, or markdown formatting. " +
-                             "The response must start with '[' and end with ']'."
-                },
-                new
-                {
-                    role = "user",
-                    content = prompt
-                }
+        var requestBody = new {
+            model,
+            messages = new[] {
+                new { role = "system", content = TranslateUtils.BuildSystemPrompt() },
+                new { role = "user", content = prompt }
             },
-            max_tokens = 4000,
             temperature = 0.1,
             stream = false
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.x.ai/v1/chat/completions");
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
         request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new Exception($"Grok AI API error ({response.StatusCode}): {errorContent}");
-        }
+            throw new Exception($"Grok AI API error ({response.StatusCode}): {responseContent}");
 
-        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
         using var document = JsonDocument.Parse(responseContent);
 
         var choices = document.RootElement.GetProperty("choices");
         if (choices.GetArrayLength() == 0)
-            throw new Exception("Grok AI response contains no choices");
+            throw new Exception("Grok AI response contains no choices.");
 
-        var message = choices[0].GetProperty("message");
-        var content = message.GetProperty("content").GetString();
-
+        var content = choices[0].GetProperty("message").GetProperty("content").GetString();
         if (string.IsNullOrWhiteSpace(content))
-            throw new Exception("Grok AI result content is null or empty");
+            throw new Exception("Grok AI result content is null or empty.");
 
-        // Clean up the content to extract just the JSON array
-        content = content.Trim();
-        if (content.StartsWith("```json"))
-        {
-            var startIndex = content.IndexOf('[');
-            var endIndex = content.LastIndexOf(']');
-            if (startIndex >= 0 && endIndex > startIndex)
-            {
-                content = content.Substring(startIndex, endIndex - startIndex + 1);
-            }
-        }
-
-        return JsonSerializer.Deserialize<TranslateResult[]>(content)
-               ?? throw new Exception("Grok AI result deserialization failed");
+        return AiResponseParser.ParseResponse(content);
     }
 }

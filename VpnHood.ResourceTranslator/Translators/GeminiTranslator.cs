@@ -1,5 +1,4 @@
-﻿using Mscc.GenerativeAI;
-using System.Text.Json;
+using Mscc.GenerativeAI;
 using Mscc.GenerativeAI.Types;
 using VpnHood.ResourceTranslator.Models;
 
@@ -17,16 +16,13 @@ internal sealed class GeminiTranslator(
         var prompt = TranslateUtils.BuildPrompt(promptOptions);
 
         var geminiModel = _googleAi.GenerativeModel(model: model);
-        var response = await geminiModel.GenerateContent(prompt, new GenerationConfig
-        {
-            ResponseMimeType = "application/json",
+        var response = await geminiModel.GenerateContent(prompt, new GenerationConfig {
+            ResponseMimeType = "application/json"
         }, cancellationToken: cancellationToken);
 
-        if (response.Text == null)
-            throw new Exception("AI result is null");
+        if (string.IsNullOrWhiteSpace(response.Text))
+            throw new Exception("AI result content is null or empty.");
 
-        return JsonSerializer.Deserialize<TranslateResult[]>(response.Text)
-               ?? throw new Exception("AI result deserialization failed.");
-
+        return AiResponseParser.ParseResponse(response.Text);
     }
 }

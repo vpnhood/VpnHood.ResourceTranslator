@@ -2,42 +2,45 @@ namespace VpnHood.ResourceTranslator;
 
 internal class ArgumentParser
 {
-    public string? BasePath { get; set; }
-    public string? ExtraPromptPath { get; set; }
-    public string? ApiKey { get; set; }
-    public string? Model { get; set; }
-    public string? Engine { get; set; }
-    public bool ShowChanges { get; set; }
-    public string? RebuildLang { get; set; }
-    public bool RebuildHashes { get; set; }
-    public int BatchSize { get; set; } = 20;
-    public bool ShowHelp { get; set; }
+    public string? BasePath { get; private set; }
+    public string? ExtraPromptPath { get; private set; }
+    public string? ApiKey { get; private set; }
+    public string? Model { get; private set; }
+    public string? Engine { get; private set; }
+    public bool ShowChanges { get; private set; }
+    public string? RebuildLang { get; private set; }
+    public bool RebuildHashes { get; private set; }
+    public int BatchSize { get; private set; } = 20;
+    public bool ShowHelp { get; private set; }
 
     public bool Parse(string[] args)
     {
-        for (var i = 0; i < args.Length; i++)
-        {
-            switch (args[i])
-            {
+        for (var i = 0; i < args.Length; i++) {
+            switch (args[i]) {
                 case "-b":
                 case "--base":
-                    BasePath = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var basePath)) return false;
+                    BasePath = basePath;
                     break;
                 case "-x":
                 case "--extra-prompt":
-                    ExtraPromptPath = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var extraPromptPath)) return false;
+                    ExtraPromptPath = extraPromptPath;
                     break;
                 case "-k":
                 case "--api-key":
-                    ApiKey = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var apiKey)) return false;
+                    ApiKey = apiKey;
                     break;
                 case "-m":
                 case "--model":
-                    Model = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var model)) return false;
+                    Model = model;
                     break;
                 case "-e":
                 case "--engine":
-                    Engine = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var engine)) return false;
+                    Engine = engine;
                     break;
                 case "-c":
                 case "--show-changes":
@@ -45,7 +48,8 @@ internal class ArgumentParser
                     break;
                 case "-r":
                 case "--rebuild-lang":
-                    RebuildLang = GetArgValue(args, ref i);
+                    if (!TryGetArgValue(args, ref i, out var rebuildLang)) return false;
+                    RebuildLang = rebuildLang;
                     break;
                 case "-i":
                 case "--ignore-changes":
@@ -53,28 +57,35 @@ internal class ArgumentParser
                     break;
                 case "-n":
                 case "--batch":
-                {
-                    var val = GetArgValue(args, ref i);
-                    if (int.TryParse(val, out var n) && n > 0)
-                        BatchSize = n;
+                    if (!TryGetArgValue(args, ref i, out var batchValue)) return false;
+                    if (!int.TryParse(batchValue, out var batchSize) || batchSize <= 0) {
+                        Console.Error.WriteLine($"Invalid batch size: {batchValue}. It must be a positive number.");
+                        return false;
+                    }
+                    BatchSize = batchSize;
                     break;
-                }
                 case "-h":
                 case "--help":
                     ShowHelp = true;
                     return true;
                 default:
-                    Console.WriteLine($"Unknown argument: {args[i]}");
+                    Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return false;
             }
         }
         return true;
     }
 
-    private static string GetArgValue(string[] args, ref int i)
+    private static bool TryGetArgValue(string[] args, ref int i, out string value)
     {
-        if (i + 1 < args.Length) { return args[++i]; }
-        return string.Empty;
+        if (i + 1 < args.Length) {
+            value = args[++i];
+            return true;
+        }
+
+        Console.Error.WriteLine($"Missing value for argument: {args[i]}");
+        value = string.Empty;
+        return false;
     }
 
     public static void PrintHelp()

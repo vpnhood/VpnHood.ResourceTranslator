@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -12,13 +12,28 @@ internal static class Program
 {
     private const int DefaultTranslateTimeoutSeconds = 100;
 
+    private static readonly JsonSerializerOptions OutputSerializerOptions = new() {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private static async Task<int> Main(string[] args)
+    {
+        try {
+            return await RunAsync(args);
+        }
+        catch (Exception ex) {
+            await Console.Error.WriteLineAsync($"Error: {ex.Message}");
+            return 10;
+        }
+    }
+
+    private static async Task<int> RunAsync(string[] args)
     {
         var argumentParser = new ArgumentParser();
 
-        if (!argumentParser.Parse(args)) {
+        if (!argumentParser.Parse(args))
             return 1;
-        }
 
         if (argumentParser.ShowHelp) {
             ArgumentParser.PrintHelp();
@@ -50,8 +65,7 @@ internal static class Program
         var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
 
         // Load prompt files
-        ArgumentNullException.ThrowIfNull(Environment.ProcessPath, "Could not determine process file.");
-        var promptFile = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, "translation-prompt.txt");
+        var promptFile = Path.Combine(AppContext.BaseDirectory, "translation-prompt.txt");
         var prompt = await File.ReadAllTextAsync(promptFile);
 
         string? extraPrompt = null;
@@ -59,7 +73,7 @@ internal static class Program
             extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(argumentParser.ExtraPromptPath));
         else if (File.Exists(GetCustomPromptFilePath(basePath)))
             extraPrompt = await File.ReadAllTextAsync(GetCustomPromptFilePath(basePath));
-        
+
         var hashesPath = GetHashesFilePath(basePath);
 
         // Load base language file
@@ -96,10 +110,8 @@ internal static class Program
 
         // Get API key
         var apiKey = argumentParser.ApiKey;
-        if (string.IsNullOrWhiteSpace(apiKey)) {
-            var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
-            apiKey = Environment.GetEnvironmentVariable(envVarName);
-        }
+        if (string.IsNullOrWhiteSpace(apiKey))
+            apiKey = Environment.GetEnvironmentVariable(EngineModelSelector.GetEnvironmentVariableName(engine));
 
         if (string.IsNullOrWhiteSpace(apiKey)) {
             var envVarName = EngineModelSelector.GetEnvironmentVariableName(engine);
@@ -108,20 +120,14 @@ internal static class Program
         }
 
         // Create translator based on engine
-        ITranslator translator = engine.ToLowerInvariant() switch {
-            "gpt" or "chatgpt" => new ChatGptTranslator(apiKey, model),
+        ITranslator translator = engine switch {
+            "gpt" => new ChatGptTranslator(apiKey, model),
             "gemini" => new GeminiTranslator(apiKey, model),
-            "meta" or "meta-ai" => new MetaAiTranslator(apiKey, model),
-            "grok" or "grok-ai" or "x-ai" => new GrokAiTranslator(apiKey, model),
-            _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt, meta, grok")
+            "grok" => new GrokAiTranslator(apiKey, model),
+            _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt, grok")
         };
 
-        // Find sibling locale files (all *.json except the base)
         var dir = Path.GetDirectoryName(basePath)!;
-        var baseFileName = Path.GetFileName(basePath);
-        var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
-            .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
 
         // Handle rebuild specific language
         if (!string.IsNullOrWhiteSpace(argumentParser.RebuildLang)) {
@@ -130,6 +136,12 @@ internal static class Program
                 prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize, isRebuild: true);
         }
         else {
+            // Find sibling locale files (all *.json except the base)
+            var baseFileName = Path.GetFileName(basePath);
+            var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
+                .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
             if (files.Count == 0)
                 Console.WriteLine("No sibling locale files found to translate.");
 
@@ -158,6 +170,7 @@ internal static class Program
         bool isRebuild = false)
     {
         var localeCode = Path.GetFileNameWithoutExtension(localePath);
+        var localeFileName = Path.GetFileName(localePath);
 
         if (!TryLoadJsonObject(localePath, out var localeObj, out _))
             localeObj = new JsonObject();
@@ -168,31 +181,30 @@ internal static class Program
 
         var output = new JsonObject();
         var translatedCount = 0;
-        var totalKeys = orderedKeys.Count;
-        var missingKeys = orderedKeys.Where(key => !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(localeMap[key])).ToList();
+        var missingCount = orderedKeys.Count(key => !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(localeMap[key]));
 
         if (isRebuild)
-            Console.WriteLine($"Rebuilding {Path.GetFileName(localePath)} ({localeCode}) - translating all {totalKeys} keys...");
-        else if (missingKeys.Count > 0)
-            Console.WriteLine($"Processing {Path.GetFileName(localePath)} ({localeCode}) - {changedKeys.Count} changed, {missingKeys.Count} missing entries...");
+            Console.WriteLine($"Rebuilding {localeFileName} ({localeCode}) - translating all {orderedKeys.Count} keys...");
+        else if (missingCount > 0)
+            Console.WriteLine($"Processing {localeFileName} ({localeCode}) - {changedKeys.Count} changed, {missingCount} missing entries...");
 
-        // Pre-populate output with existing values or base for URLs
-        var itemsToTranslate = new List<TranslateItem>(totalKeys);
+        // Pre-populate output with existing values and collect items that need translation
+        var itemsToTranslate = new List<TranslateItem>(orderedKeys.Count);
         foreach (var key in orderedKeys) {
             var baseText = baseMap[key];
             var hasExisting = localeMap.TryGetValue(key, out var existingValue) && !string.IsNullOrWhiteSpace(existingValue);
-            var isMissing = !hasExisting;
-            var needsTranslation = isRebuild || changedKeys.Contains(key) || isMissing;
+            var needsTranslation = isRebuild || changedKeys.Contains(key) || !hasExisting;
 
-            if (needsTranslation && !ShouldTranslate(baseText)) {
-                output[key] = baseText; // keep URLs as-is
+            // Nothing to translate for empty source values; copy them as-is
+            if (needsTranslation && string.IsNullOrWhiteSpace(baseText)) {
+                output[key] = baseText;
                 continue;
             }
 
-            // default output is the existing translation if any, or empty
+            // default output is the existing translation if any, or empty until translated
             output[key] = hasExisting ? existingValue : string.Empty;
 
-            if (needsTranslation && ShouldTranslate(baseText)) {
+            if (needsTranslation) {
                 itemsToTranslate.Add(new TranslateItem {
                     SourceLanguage = sourceLanguage,
                     TargetLanguage = localeCode,
@@ -203,32 +215,34 @@ internal static class Program
         }
 
         // Batch translate items
-        for (int i = 0; i < itemsToTranslate.Count; i += Math.Max(1, batchSize)) {
-            var batch = itemsToTranslate.Skip(i).Take(Math.Max(1, batchSize)).ToArray();
-            if (batch.Length == 0) break;
+        var effectiveBatchSize = Math.Max(1, batchSize);
+        for (var i = 0; i < itemsToTranslate.Count; i += effectiveBatchSize) {
+            var batch = itemsToTranslate.Skip(i).Take(effectiveBatchSize).ToArray();
 
             var promptOptions = BuildPromptOptionsForBatch(batch, prompt, extraPrompt);
             var results = await TranslateBatchWithRetryAsync(translator, promptOptions, localePath, i);
-            
+
             // check results count
-            if (results.Length != batch.Length) 
-                throw new Exception($"Translation result count mismatch for {Path.GetFileName(localePath)} at batch starting index {i}. Expected {batch.Length}, got {results.Length}.");
+            if (results.Length != batch.Length)
+                throw new Exception($"Translation result count mismatch for {localeFileName} at batch starting index {i}. Expected {batch.Length}, got {results.Length}.");
 
             foreach (var res in results) {
-                // Skip if instructed
-                if (res.TranslatedText.Trim() == "*")
+                // "*" means the AI skipped this item; keep the existing value, or fall back to the source text
+                if (res.TranslatedText.Trim() == "*") {
+                    if (string.IsNullOrWhiteSpace(output[res.Key]?.GetValue<string>()))
+                        output[res.Key] = baseMap.GetValueOrDefault(res.Key, string.Empty);
                     continue;
+                }
 
                 // Post-process and apply
                 var baseText = baseMap.GetValueOrDefault(res.Key, string.Empty);
-                var finalText = PostProcessTranslation(baseText, res.TranslatedText);
-                output[res.Key] = finalText;
+                output[res.Key] = TranslateUtils.PostProcessTranslation(baseText, res.TranslatedText);
                 translatedCount++;
             }
 
             if (isRebuild) {
                 var done = Math.Min(i + batch.Length, itemsToTranslate.Count);
-                Console.WriteLine($"  Progress: {done}/{itemsToTranslate.Count} ({(done * 100 / Math.Max(1, itemsToTranslate.Count)):F0}%)");
+                Console.WriteLine($"  Progress: {done}/{itemsToTranslate.Count} ({done * 100 / itemsToTranslate.Count}%)");
             }
         }
 
@@ -236,11 +250,11 @@ internal static class Program
         await WriteJsonAsync(localePath, output);
 
         if (isRebuild)
-            Console.WriteLine($"✓ {Path.GetFileName(localePath)}: Rebuilt with {translatedCount} translations.");
+            Console.WriteLine($"✓ {localeFileName}: Rebuilt with {translatedCount} translations.");
         else if (translatedCount > 0)
-            Console.WriteLine($"✓ {Path.GetFileName(localePath)}: {translatedCount} translated/updated.");
+            Console.WriteLine($"✓ {localeFileName}: {translatedCount} translated/updated.");
         else
-            Console.WriteLine($"  {Path.GetFileName(localePath)}: Up to date, no changes needed.");
+            Console.WriteLine($"  {localeFileName}: Up to date, no changes needed.");
     }
 
     private static PromptOptions BuildPromptOptionsForBatch(TranslateItem[] items, string prompt, string? extraPrompt)
@@ -266,26 +280,26 @@ internal static class Program
         int batchStartIndex,
         int retryCount = 5)
     {
-        var attempt = 0;
+        var localeFileName = Path.GetFileName(localePath);
 
-        while (attempt < retryCount) {
-            attempt++;
+        for (var attempt = 1; attempt <= retryCount; attempt++) {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(DefaultTranslateTimeoutSeconds));
             try {
                 await Task.Delay(500, CancellationToken.None); // brief pause to avoid rate limits
                 return await translator.TranslateAsync(promptOptions, cts.Token);
             }
             catch (OperationCanceledException) {
-                await Console.Error.WriteLineAsync($"Timeout while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}).");
-                await Task.Delay(500, CancellationToken.None); // extra wait to avoid rate limits
+                await Console.Error.WriteLineAsync($"Timeout while translating {localeFileName} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}).");
             }
             catch (Exception ex) {
-                await Console.Error.WriteLineAsync($"Error while translating {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}): {ex.Message}.");
-                await Task.Delay(500, CancellationToken.None); // extra wait to avoid rate limits
+                await Console.Error.WriteLineAsync($"Error while translating {localeFileName} batch starting at index {batchStartIndex} (attempt {attempt}/{retryCount}): {ex.Message}");
             }
+
+            // back off a bit more after each failed attempt to avoid rate limits
+            await Task.Delay(TimeSpan.FromMilliseconds(500 * attempt), CancellationToken.None);
         }
 
-        throw new Exception($"Failed to translate {Path.GetFileName(localePath)} batch starting at index {batchStartIndex} after {retryCount} attempts.");
+        throw new Exception($"Failed to translate {localeFileName} batch starting at index {batchStartIndex} after {retryCount} attempts.");
     }
 
     private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
@@ -306,33 +320,23 @@ internal static class Program
 
     private static async Task WriteJsonAsync(string path, JsonObject obj)
     {
-        var options = new JsonSerializerOptions {
-            WriteIndented = true,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        };
         await using var fs = File.Create(path);
-        await JsonSerializer.SerializeAsync(fs, obj, options);
+        await JsonSerializer.SerializeAsync(fs, obj, OutputSerializerOptions);
     }
 
     private static Dictionary<string, string> ComputeMd5Hashes(Dictionary<string, string> map)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (k, v) in map) {
-            result[k] = Md5Hex(v);
-        }
+        foreach (var (key, value) in map)
+            result[key] = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(value)));
         return result;
-    }
-
-    private static string Md5Hex(string input)
-    {
-        using var md5 = MD5.Create();
-        var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
     }
 
     private static async Task<Dictionary<string, string>> LoadHashesAsync(string path)
     {
-        if (!File.Exists(path)) return new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!File.Exists(path))
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+
         try {
             var txt = await File.ReadAllTextAsync(path);
             var obj = JsonSerializer.Deserialize<Dictionary<string, string>>(txt) ?? new();
@@ -346,7 +350,9 @@ internal static class Program
     private static async Task SaveHashesAsync(string path, Dictionary<string, string> hashes)
     {
         var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
         var options = new JsonSerializerOptions { WriteIndented = true };
         var txt = JsonSerializer.Serialize(hashes, options);
         await File.WriteAllTextAsync(path, txt);
@@ -360,19 +366,16 @@ internal static class Program
         foreach (var key in keys) {
             var cur = currentMd5.GetValueOrDefault(key);
             var prev = previous.GetValueOrDefault(key);
-            if (!string.Equals(cur, prev, StringComparison.Ordinal)) {
+            if (!string.Equals(cur, prev, StringComparison.Ordinal))
                 changed.Add(key);
-            }
         }
         return changed;
     }
 
     private static string GetPrivateFolderPath(string basePath)
     {
-        // Location: <baseDir>/vh_translator/<baseLang>_watch.json
         var baseDir = Path.GetDirectoryName(basePath)!;
         return Path.Combine(baseDir, "vh_translator");
-
     }
 
     private static string GetCustomPromptFilePath(string basePath)
@@ -382,52 +385,8 @@ internal static class Program
 
     private static string GetHashesFilePath(string basePath)
     {
+        // Location: <baseDir>/vh_translator/<baseLang>_watch.json
         var baseLang = Path.GetFileNameWithoutExtension(basePath);
         return Path.Combine(GetPrivateFolderPath(basePath), $"{baseLang}_watch.json");
-    }
-
-    private static bool ShouldTranslate(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return false;
-        return true;
-        //return s.Contains("://", StringComparison.Ordinal) || s.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string PostProcessTranslation(string source, string? translated)
-    {
-        if (translated == null) return string.Empty;
-        translated = translated.Trim();
-        // Remove wrapping quotes/backticks if present
-        if ((translated.StartsWith("\"") && translated.EndsWith("\"")) ||
-            (translated.StartsWith("'") && translated.EndsWith("'")) ||
-            (translated.StartsWith("`") && translated.EndsWith("`"))) {
-            translated = translated.Substring(1, translated.Length - 2);
-        }
-
-        // Ensure placeholders like {x} remain present
-        var tokens = ExtractPlaceholders(source);
-        foreach (var token in tokens) {
-            if (!translated.Contains(token, StringComparison.Ordinal)) {
-                // If token missing, append it to avoid breaking runtime formatting
-                translated = translated + (translated.EndsWith(" ") ? string.Empty : " ") + token;
-            }
-        }
-        return translated;
-    }
-
-    private static List<string> ExtractPlaceholders(string s)
-    {
-        var list = new List<string>();
-        if (string.IsNullOrEmpty(s)) return list;
-        for (var i = 0; i < s.Length; i++) {
-            if (s[i] == '{') {
-                var j = s.IndexOf('}', i + 1);
-                if (j > i) {
-                    list.Add(s.Substring(i, j - i + 1));
-                    i = j;
-                }
-            }
-        }
-        return list;
     }
 }
