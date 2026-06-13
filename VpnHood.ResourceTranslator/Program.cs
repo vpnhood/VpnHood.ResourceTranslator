@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -19,29 +20,84 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
-        try {
-            return await RunAsync(args);
-        }
-        catch (Exception ex) {
-            await Console.Error.WriteLineAsync($"Error: {ex.Message}");
-            return 10;
-        }
+        var baseOption = new Option<string?>("--base", "-b") {
+            Description = "Path to base language file (e.g., en.json, fr.json, de.json)"
+        };
+        var extraPromptOption = new Option<string?>("--extra-prompt", "-x") {
+            Description = "Path to extra instructions text file for the AI prompt"
+        };
+        var showChangesOption = new Option<bool>("--show-changes", "-c") {
+            Description = "Show changed keys since last translation and exit"
+        };
+        var rebuildLangOption = new Option<string?>("--rebuild-lang", "-r") {
+            Description = "Force rebuild/translate all items for specific language (e.g., 'fr', 'es')"
+        };
+        var ignoreChangesOption = new Option<bool>("--ignore-changes", "-i") {
+            Description = "Rebuild hash file to mark all entries as current (no translation)"
+        };
+        var apiKeyOption = new Option<string?>("--api-key", "-k") {
+            Description = "API key (or set GEMINI_API_KEY/OPENAI_API_KEY/GROK_API_KEY env var)"
+        };
+        var modelOption = new Option<string?>("--model", "-m") {
+            Description = "AI model (default: gemini-flash-lite-latest, grok-4-latest for grok engine)"
+        };
+        var engineOption = new Option<string?>("--engine", "-e") {
+            Description = "Translation engine: gemini, gpt, or grok (default: auto-detected from model)"
+        };
+        var batchOption = new Option<int>("--batch", "-n") {
+            Description = "Batch size for translation requests",
+            DefaultValueFactory = _ => 20
+        };
+        batchOption.Validators.Add(result => {
+            if (result.GetValueOrDefault<int>() <= 0)
+                result.AddError("Batch size must be a positive number.");
+        });
+
+        var rootCommand = new RootCommand(
+            "Translates JSON i18n resource files using AI (Google Gemini, OpenAI ChatGPT, or Grok AI) " +
+            "while preserving placeholders, HTML tags, and formatting. " +
+            "The engine is auto-detected from the model name if not specified; " +
+            "missing entries in target languages are always translated regardless of hash changes.") {
+            baseOption,
+            extraPromptOption,
+            showChangesOption,
+            rebuildLangOption,
+            ignoreChangesOption,
+            apiKeyOption,
+            modelOption,
+            engineOption,
+            batchOption
+        };
+
+        rootCommand.SetAction(async (parseResult, _) => {
+            var options = new TranslatorOptions {
+                BasePath = parseResult.GetValue(baseOption),
+                ExtraPromptPath = parseResult.GetValue(extraPromptOption),
+                ApiKey = parseResult.GetValue(apiKeyOption),
+                Model = parseResult.GetValue(modelOption),
+                Engine = parseResult.GetValue(engineOption),
+                ShowChanges = parseResult.GetValue(showChangesOption),
+                RebuildLang = parseResult.GetValue(rebuildLangOption),
+                RebuildHashes = parseResult.GetValue(ignoreChangesOption),
+                BatchSize = parseResult.GetValue(batchOption)
+            };
+
+            try {
+                return await RunAsync(options);
+            }
+            catch (Exception ex) {
+                await Console.Error.WriteLineAsync($"Error: {ex.Message}");
+                return 10;
+            }
+        });
+
+        return await rootCommand.Parse(args).InvokeAsync();
     }
 
-    private static async Task<int> RunAsync(string[] args)
+    private static async Task<int> RunAsync(TranslatorOptions options)
     {
-        var argumentParser = new ArgumentParser();
-
-        if (!argumentParser.Parse(args))
-            return 1;
-
-        if (argumentParser.ShowHelp) {
-            ArgumentParser.PrintHelp();
-            return 0;
-        }
-
         // Get base path
-        var basePath = argumentParser.BasePath;
+        var basePath = options.BasePath;
         if (string.IsNullOrWhiteSpace(basePath)) {
             Console.Write("Enter path to base language file (e.g., en.json, fr.json): ");
             basePath = Console.ReadLine();
@@ -59,7 +115,7 @@ internal static class Program
         }
 
         // Select engine and model
-        var (engine, model) = EngineModelSelector.SelectEngineAndModel(argumentParser.Engine, argumentParser.Model);
+        var (engine, model) = EngineModelSelector.SelectEngineAndModel(options.Engine, options.Model);
 
         // Extract source language from filename (e.g., "en" from "en.json")
         var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
@@ -69,8 +125,8 @@ internal static class Program
         var prompt = await File.ReadAllTextAsync(promptFile);
 
         string? extraPrompt = null;
-        if (!string.IsNullOrWhiteSpace(argumentParser.ExtraPromptPath))
-            extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(argumentParser.ExtraPromptPath));
+        if (!string.IsNullOrWhiteSpace(options.ExtraPromptPath))
+            extraPrompt = await File.ReadAllTextAsync(Path.GetFullPath(options.ExtraPromptPath));
         else if (File.Exists(GetCustomPromptFilePath(basePath)))
             extraPrompt = await File.ReadAllTextAsync(GetCustomPromptFilePath(basePath));
 
@@ -92,7 +148,7 @@ internal static class Program
         var previousHashes = await LoadHashesAsync(hashesPath);
 
         // Handle rebuild hashes only
-        if (argumentParser.RebuildHashes) {
+        if (options.RebuildHashes) {
             await SaveHashesAsync(hashesPath, currentMd5);
             Console.WriteLine($"✓ Hashes rebuilt for {orderedKeys.Count} keys. All entries now marked as current.");
             return 0;
@@ -100,7 +156,7 @@ internal static class Program
 
         var changedKeys = DetermineChangedKeys(baseMap.Keys, currentMd5, previousHashes);
 
-        if (argumentParser.ShowChanges) {
+        if (options.ShowChanges) {
             Console.WriteLine($"Changed keys since last translation: {changedKeys.Count}");
             foreach (var key in changedKeys) {
                 Console.WriteLine($" - {key}");
@@ -109,7 +165,7 @@ internal static class Program
         }
 
         // Get API key
-        var apiKey = argumentParser.ApiKey;
+        var apiKey = options.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
             apiKey = Environment.GetEnvironmentVariable(EngineModelSelector.GetEnvironmentVariableName(engine));
 
@@ -130,10 +186,10 @@ internal static class Program
         var dir = Path.GetDirectoryName(basePath)!;
 
         // Handle rebuild specific language
-        if (!string.IsNullOrWhiteSpace(argumentParser.RebuildLang)) {
-            var rebuildPath = Path.Combine(dir, $"{argumentParser.RebuildLang}.json");
+        if (!string.IsNullOrWhiteSpace(options.RebuildLang)) {
+            var rebuildPath = Path.Combine(dir, $"{options.RebuildLang}.json");
             await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
-                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize, isRebuild: true);
+                prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: options.BatchSize, isRebuild: true);
         }
         else {
             // Find sibling locale files (all *.json except the base)
@@ -147,7 +203,7 @@ internal static class Program
 
             foreach (var localePath in files) {
                 await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
-                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: argumentParser.BatchSize);
+                    prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: options.BatchSize);
             }
         }
 

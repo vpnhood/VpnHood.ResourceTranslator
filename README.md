@@ -108,7 +108,8 @@ Options:
   -m, --model <name>         AI model (default: gemini-flash-lite-latest)
   -e, --engine <name>        Translation engine: gemini, gpt, or grok (default: auto-detected)
   -n, --batch <number>       Batch size for translation requests (default: 20)
-  -h, --help                 Show help
+  -?, -h, --help             Show help and usage information
+  --version                  Show version information
 ```
 
 ### Examples
