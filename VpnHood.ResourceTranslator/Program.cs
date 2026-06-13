@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using VpnHood.ResourceTranslator.Formats;
 using VpnHood.ResourceTranslator.Models;
 using VpnHood.ResourceTranslator.Translators;
 
@@ -21,7 +22,7 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         var baseOption = new Option<string?>("--base", "-b") {
-            Description = "Path to base language file (e.g., en.json, fr.json, de.json)"
+            Description = "Path to base language file (e.g., en.json, fr.json, or Strings.resx)"
         };
         var extraPromptOption = new Option<string?>("--extra-prompt", "-x") {
             Description = "Path to extra instructions text file for the AI prompt"
@@ -54,7 +55,7 @@ internal static class Program
         });
 
         var rootCommand = new RootCommand(
-            "Translates JSON i18n resource files using AI (Google Gemini, OpenAI ChatGPT, or Grok AI) " +
+            "Translates i18n resource files (JSON or Microsoft .resx) using AI (Google Gemini, OpenAI ChatGPT, or Grok AI) " +
             "while preserving placeholders, HTML tags, and formatting. " +
             "The engine is auto-detected from the model name if not specified; " +
             "missing entries in target languages are always translated regardless of source changes.") {
@@ -99,7 +100,7 @@ internal static class Program
         // Get base path
         var basePath = options.BasePath;
         if (string.IsNullOrWhiteSpace(basePath)) {
-            Console.Write("Enter path to base language file (e.g., en.json, fr.json): ");
+            Console.Write("Enter path to base language file (e.g., en.json, Strings.resx): ");
             basePath = Console.ReadLine();
         }
 
@@ -114,11 +115,19 @@ internal static class Program
             return 2;
         }
 
+        // Select the resource format based on the file extension (.json or .resx)
+        var format = ResourceFormatFactory.TryCreate(basePath);
+        if (format == null) {
+            await Console.Error.WriteLineAsync(
+                $"Error: Unsupported file type '{Path.GetExtension(basePath)}'. Supported formats: .json, .resx");
+            return 2;
+        }
+
         // Select engine and model
         var (engine, model) = EngineModelSelector.SelectEngineAndModel(options.Engine, options.Model);
 
-        // Extract source language from filename (e.g., "en" from "en.json")
-        var sourceLanguage = Path.GetFileNameWithoutExtension(basePath);
+        // Determine source language from the base file (e.g., "en" from en.json, culture from Strings.fr.resx)
+        var sourceLanguage = format.GetLanguageCode(basePath);
 
         // Load prompt files
         var promptFile = Path.Combine(AppContext.BaseDirectory, "translation-prompt.txt");
@@ -133,13 +142,13 @@ internal static class Program
         var watchPath = GetWatchFilePath(basePath);
 
         // Load base language file
-        if (!TryLoadJsonObject(basePath, out var baseObj, out var loadErr)) {
-            await Console.Error.WriteLineAsync($"Error: Failed to parse base JSON: {loadErr}");
+        if (!format.TryLoad(basePath, out var baseEntries, out var loadErr)) {
+            await Console.Error.WriteLineAsync($"Error: Failed to parse base file: {loadErr}");
             return 3;
         }
 
-        var orderedKeys = baseObj!.Select(p => p.Key).ToList();
-        var baseMap = baseObj!.ToDictionary(kv => kv.Key, kv => kv.Value?.GetValue<string>() ?? string.Empty);
+        var orderedKeys = baseEntries.Select(e => e.Key).ToList();
+        var baseMap = baseEntries.ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal);
 
         // Load previous watch entries (source texts, or MD5 hashes for legacy watch files)
         var (previousEntries, previousAreHashes) = await LoadWatchEntriesAsync(watchPath);
@@ -180,26 +189,21 @@ internal static class Program
             _ => throw new ArgumentException($"Unknown engine: {engine}. Supported engines: gemini, gpt, grok")
         };
 
-        var dir = Path.GetDirectoryName(basePath)!;
-
         // Handle rebuild specific language
         if (!string.IsNullOrWhiteSpace(options.RebuildLang)) {
-            var rebuildPath = Path.Combine(dir, $"{options.RebuildLang}.json");
-            await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator,
+            var rebuildPath = format.GetLocaleFilePath(basePath, options.RebuildLang);
+            await TranslateFileAsync(rebuildPath, orderedKeys, baseMap, baseMap.Keys.ToHashSet(), translator, format,
                 prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: options.BatchSize, isRebuild: true);
         }
         else {
-            // Find sibling locale files (all *.json except the base)
-            var baseFileName = Path.GetFileName(basePath);
-            var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
-                .Where(p => !Path.GetFileName(p).Equals(baseFileName, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            // Find sibling locale files for this format
+            var files = format.FindSiblingLocaleFiles(basePath).ToList();
 
             if (files.Count == 0)
                 Console.WriteLine("No sibling locale files found to translate.");
 
             foreach (var localePath in files) {
-                await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator,
+                await TranslateFileAsync(localePath, orderedKeys, baseMap, changedKeys, translator, format,
                     prompt: prompt, extraPrompt: extraPrompt, sourceLanguage: sourceLanguage, batchSize: options.BatchSize);
             }
         }
@@ -217,23 +221,23 @@ internal static class Program
         Dictionary<string, string> baseMap,
         HashSet<string> changedKeys,
         ITranslator translator,
+        IResourceFormat format,
         string prompt,
         string? extraPrompt,
         string sourceLanguage,
         int batchSize,
         bool isRebuild = false)
     {
-        var localeCode = Path.GetFileNameWithoutExtension(localePath);
+        var localeCode = format.GetLanguageCode(localePath);
         var localeFileName = Path.GetFileName(localePath);
 
-        if (!TryLoadJsonObject(localePath, out var localeObj, out _))
-            localeObj = new JsonObject();
+        var localeMap = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (format.TryLoad(localePath, out var localeEntries, out _)) {
+            foreach (var kv in localeEntries)
+                localeMap[kv.Key] = kv.Value;
+        }
 
-        var localeMap = new Dictionary<string, string>();
-        foreach (var kv in localeObj!)
-            localeMap[kv.Key] = kv.Value?.GetValue<string>() ?? string.Empty;
-
-        var output = new JsonObject();
+        var output = new Dictionary<string, string>(StringComparer.Ordinal);
         var translatedCount = 0;
         var missingCount = orderedKeys.Count(key => !localeMap.ContainsKey(key) || string.IsNullOrWhiteSpace(localeMap[key]));
 
@@ -256,7 +260,7 @@ internal static class Program
             }
 
             // default output is the existing translation if any, or empty until translated
-            output[key] = hasExisting ? existingValue : string.Empty;
+            output[key] = hasExisting ? existingValue! : string.Empty;
 
             if (needsTranslation) {
                 itemsToTranslate.Add(new TranslateItem {
@@ -283,7 +287,7 @@ internal static class Program
             foreach (var res in results) {
                 // "*" means the AI skipped this item; keep the existing value, or fall back to the source text
                 if (res.TranslatedText.Trim() == "*") {
-                    if (string.IsNullOrWhiteSpace(output[res.Key]?.GetValue<string>()))
+                    if (string.IsNullOrWhiteSpace(output.GetValueOrDefault(res.Key)))
                         output[res.Key] = baseMap.GetValueOrDefault(res.Key, string.Empty);
                     continue;
                 }
@@ -300,8 +304,8 @@ internal static class Program
             }
         }
 
-        // Write JSON preserving base order
-        await WriteJsonAsync(localePath, output);
+        // Write the file preserving base key order
+        await format.SaveAsync(localePath, orderedKeys, output);
 
         if (isRebuild)
             Console.WriteLine($"✓ {localeFileName}: Rebuilt with {translatedCount} translations.");
@@ -354,28 +358,6 @@ internal static class Program
         }
 
         throw new Exception($"Failed to translate {localeFileName} batch starting at index {batchStartIndex} after {retryCount} attempts.");
-    }
-
-    private static bool TryLoadJsonObject(string path, out JsonObject? obj, out string? error)
-    {
-        try {
-            var text = File.ReadAllText(path);
-            var doc = JsonNode.Parse(text) as JsonObject;
-            obj = doc ?? throw new Exception("Root is not a JSON object.");
-            error = null;
-            return true;
-        }
-        catch (Exception ex) {
-            obj = null;
-            error = ex.Message;
-            return false;
-        }
-    }
-
-    private static async Task WriteJsonAsync(string path, JsonObject obj)
-    {
-        await using var fs = File.Create(path);
-        await JsonSerializer.SerializeAsync(fs, obj, OutputSerializerOptions);
     }
 
     private static string ComputeMd5(string value)
@@ -451,8 +433,8 @@ internal static class Program
 
     private static string GetWatchFilePath(string basePath)
     {
-        // Location: <baseDir>/vh_translator/<baseLang>_watch.json
-        var baseLang = Path.GetFileNameWithoutExtension(basePath);
-        return Path.Combine(GetPrivateFolderPath(basePath), $"{baseLang}_watch.json");
+        // Location: <baseDir>/vh_translator/<baseName>_watch.json
+        var baseName = Path.GetFileNameWithoutExtension(basePath);
+        return Path.Combine(GetPrivateFolderPath(basePath), $"{baseName}_watch.json");
     }
 }

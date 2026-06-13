@@ -1,8 +1,9 @@
-An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI ChatGPT, or Grok AI) to automatically translate JSON localization files while preserving placeholders, HTML tags, and formatting.
+An intelligent i18n resource translator that uses AI (Google Gemini, OpenAI ChatGPT, or Grok AI) to automatically translate JSON and Microsoft .resx localization files while preserving placeholders, HTML tags, and formatting.
 
 ## Features
 
 - 🤖 **Multi-Engine AI Translation** - Supports Google Gemini, OpenAI ChatGPT, and Grok AI with smart engine detection
+- 📦 **Multiple Formats** - Translates JSON (`{lang}.json`) and Microsoft .resx (`Name.resx` / `Name.{culture}.resx`) resource files
 - 🔄 **Incremental Updates** - Only translates changed entries by tracking the last-translated source text
 - 🎯 **Smart Placeholder Preservation** - Keeps `{variables}`, HTML tags, and URLs intact
 - 📁 **Batch Processing** - Translates multiple language files simultaneously
@@ -149,9 +150,11 @@ vhtranslator -b locales/en.json -c
 
 ## File Structure
 
-### Input Files
+The format is chosen automatically from the base file's extension: `.json` or `.resx`. Sibling target files are discovered by the convention for that format, and the base file is never overwritten.
 
-Your locale directory can have any language as the base:
+### JSON Input Files
+
+JSON locales are named `{language-code}.json`, and any language can be the base:
 
 **English as Base:**
 ```
@@ -173,6 +176,28 @@ locales/
 +-- de.json              # German translations
 +-- vh_translator/
     +-- fr_watch.json    # Change tracking file (auto-generated)
+```
+
+### Microsoft .resx Input Files
+
+.resx files follow the standard .NET naming convention: a neutral base file (`Name.resx`) with culture-specific siblings (`Name.{culture}.resx`). Only string `<data>` entries are translated — typed/binary entries (file references, images, serialized objects), comments, metadata, and the resx schema are preserved untouched.
+
+```
+Resources/
++-- Strings.resx          # Base file (neutral culture, treated as source "en")
++-- Strings.fr.resx       # French translations
++-- Strings.es.resx       # Spanish translations
++-- Strings.de-DE.resx    # German (Germany) translations
++-- vh_translator/
+    +-- Strings_watch.json # Change tracking file (auto-generated)
+```
+
+```bash
+# Translate every sibling Strings.{culture}.resx from the neutral base
+vhtranslator -b Resources/Strings.resx
+
+# Force-rebuild a single culture (creates Strings.es.resx if absent)
+vhtranslator -b Resources/Strings.resx -r es
 ```
 
 ### Generated Files
@@ -365,12 +390,18 @@ Error: Missing Grok API key
 - Set appropriate environment variable: `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `GROK_API_KEY`
 - Or use `-k` flag: `--api-key your-key-here`
 
-**JSON Parse Errors**
+**Parse Errors**
 ```bash
-Error: Failed to parse base JSON
+Error: Failed to parse base file
 ```
-- Check your base file for valid JSON syntax
-- Use JSON validator: `jq . your-base-file.json`
+- Check your base file for valid syntax (a JSON object for `.json`, well-formed XML for `.resx`)
+- For JSON, validate with: `jq . your-base-file.json`
+
+**Unsupported File Type**
+```bash
+Error: Unsupported file type '.xml'. Supported formats: .json, .resx
+```
+- The base file extension must be `.json` or `.resx`
 
 **Missing Placeholders**
 - The tool automatically appends missing `{placeholders}` to prevent runtime errors
